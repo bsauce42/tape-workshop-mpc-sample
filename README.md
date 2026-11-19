@@ -1,77 +1,52 @@
 # Tape Workshop for MPC Sample
-Sixteen instruments and effects for the Akai MPC Sample, bundled with a
-community build of Melodee v0.2.2 by Kerem Kiliç (Ellic Studio). The build
-includes Tape Workshop's cassette boot artwork and custom plug-in screens.
 
-## Community release 5
+Tape Workshop is an independent community build for the Akai MPC Sample, based on **Melodee v0.5.1 by Kerem Kiliç (Ellic Studio)**. The complete download includes **21 instruments and effects**, their resources, licenses and matching source.
 
-Dex FM has a new screen with the preset name, live output waveform, peak
-meter and labeled K1–K3 values. Envelope and LFO pages show response
-diagrams. Operator shape pages show signed Peak, Body and Sustain offsets.
-Turn the Data knob from Keys or the controls screen to browse presets. Use
-− / + on the controls screen to change between its 28 pages.
+## Tape Workshop v116
 
-Sloop FM6, Stillwater and Velvet Choir now show the preset name, live output
-and a peak meter, with labeled K1–K3 values. Use the Data knob from Keys or
-the plug-in controls to change presets. Use − / + on the controls screen to
-change pages. FM envelope and LFO pages, Stillwater envelope and drift,
-and Velvet Choir's section blend have parameter-driven diagrams.
+[Download the v116 release](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/tag/v0.5.1-tapeworkshop-community.116)
 
-For Layer House, turn the **Data knob** on the Keys or plug-in controls screen
-to browse presets. The preset loads after you stop turning. Push the knob on
-Keys to open the controls screen, where the selected preset appears below the
-plug-in name. Use **− / +** to change control pages.
+**Tape-Workshop-v116-Complete.zip** is the recommended download: full OS + all 21 plug-ins. The smaller **Signed-Update.zip** is OS-only for the browser updater and does not replace plug-in folders.
 
-Second Spin 2 adds animated reels, a live VU needle, and seven labeled
-K1–K3 pages. Choose 7.5, 15, or 30 IPS and four tape stocks. Try **15 IPS Mix
-Glue** for a first listen. The Cassette path restores the original sound and
-old project settings. The updated host in the install ZIP drives the new screen.
+### Changes
 
-## Downloads
+- Second Spin Crackle now returns after zero when turned back up, without requiring a new note. Verified on the physical MPC running v116.
+- Distinct plug-in panels and parameter pages, live stereo waveforms, measured spectra and output meters. Voice/source-mix graphics use live audio waveforms.
+- Afterglow Piano hot-green theme; Second Spin cassette reels follow audio and stop in silence.
+- Turn **Data** directly on an instrument plug-in UI to browse exposed presets and see the selected name while scrolling. **B2** still opens the full list. Effects use **Shift + Data** for exposed presets.
+- Room Grand 1.3.1 softens release noise and defaults Release Noise to zero in the engine and all factory presets. Saved project values are retained.
+- Read-only performance diagnostics expose existing load and audio-dropout counters.
+- Roll MIDI import, selection, Shift + K3 zoom and fine splitting; expansion bank/pad import, artwork and all-eight-bank builder; Live Screen/Tutorial Mode, stereo recording and logo/background options; themes, startup lighting and signed updates are retained.
 
-- **Tape-Workshop-Hub-MPC-Sample.zip** contains the SD install, all 16 ARM64 plug-ins, skins and piano sample banks.
-- **Tape-Workshop-Hub-Source.zip** contains the corresponding host and plug-in source, dependencies, assets, build scripts and license notices.
-- **SHA256SUMS.txt** contains checksums for both downloads.
-
-## Instruments and effects
-
-| Instrument | Sound |
-| --- | --- |
-| Afterglow Piano | Sampled concert grand and layered tones |
-| Astral Loom | Four-layer cinematic synth and organic textures |
-| Dex FM | Six-operator FM, electric pianos, bells and plucks |
-| Layer House | Four-layer wavetable synthesizer |
-| Room Grand | Grand pianos and keyboard tones |
-| Sloop FM6 | Six-operator FM with ambient pads |
-| Stillwater | Evolving ambient pads |
-| Sub Foundry | 808s, synth bass and sub layers |
-| Velvet Choir | Vowel morphing and full choir mode |
-
-| Effect | Controls |
-| --- | --- |
-| Break 26 | Sampler-style grit and drums |
-| Contour Comp | Compressor with a live transfer curve and history |
-| Gate Keeper | Gate and expander with a live response curve |
-| Prism EQ | Color-coded EQ with live spectrum |
-| Rack 76 | FET-style compressor with a needle meter and history |
-| Second Spin 2 | Reel-to-reel saturation, live VU and classic cassette mode |
-| Vocal Tune | Pitch correction with live pitch feedback |
+Sub Foundry, Contour Comp and the enlarged Prism EQ retain their established layouts. The browser DAW/Studio remains removed. The separate Melodee plug-in UI installer is a different product.
 
 ## Install
 
-1. Use an Akai MPC Sample running firmware **1.3.0.12**. Back up the microSD card.
-2. Unzip the SD install. Move any existing root-level `autorun` folder to your backup, then copy the included `autorun` to the top level of the card.
-3. Merge the included `Melodee/Plugins` into the card's `Melodee/Plugins` folder. Replace older copies of the same plug-ins.
-4. Restart the MPC Sample. Open the track sound picker for instruments or an FX slot's plug-in picker for effects.
+For MPC Sample firmware **1.3.0.12**:
 
-The included host provides the custom screens for the bundle. This build uses manual SD installation and omits the optional 32-bit bridge runtime, GUI stubs and supplemental Linux libraries. Removing the installed `autorun` from the card lets the stock app start at the next boot.
+1. Back up the SD card and matching plug-in folders; power off the MPC.
+2. Extract **Complete.zip**. Replace the root-level `autorun` folder with the included `autorun`.
+3. Merge the included `Melodee/Plugins` folders onto the card. Preserve projects, samples, user presets and other third-party plug-ins.
+4. Restart the MPC. Connect over USB-C and reopen the companion at `http://192.168.155.1/` after updating.
 
-The binaries and archives were checked on the development machine. Booting, audio playback and hardware controls still need validation on an MPC Sample.
+The browser Manual Install uses **Signed-Update.zip**. To receive the updated Room Grand binary as well, copy its plug-in folder from **Complete.zip**. Source archives do not need to go on the SD card.
+
+## Verification
+
+ARM64 build, native engine/model/binding tests, repeated real-DSP idle-wake regression, signed update, ZIP integrity and the 21-bundle inventory passed. The Second Spin zero/back-up fix was tested on the physical MPC.
+
+A short on-device v115 test with Afterglow Piano, Astral Loom, Room Grand and Layer House playing together, live visuals and browser audio had zero audio dropouts or overload voice cuts. Peak audio render-budget use was about 35%; the busiest CPU core peaked at 48%. This describes that workload, not every preset or a full 16-track maximum load.
+
+## Matching source and guides
+
+Release assets include `Melodee-v116-source.tar.gz` (OS commit `1b1c044c5050d4288f6781defcdf0ec69c7be749`, with pinned base runtime), `Tape-Workshop-v116-Plugins-Source.tar.gz`, guides, revision notes and SHA-256 files.
+
+This repository is the distribution hub. Its branch and GitHub-generated source archives are not synchronized with the attached OS source. Use the attached source archives for this build.
 
 ## Credits and licenses
 
-- Melodee and sample-base are by Kerem Kiliç (Ellic Studio). This release is an independent community build. [Melodee source and notices](https://github.com/keremimo/melodee-sample/blob/main/THIRD_PARTY.md)
-- The Melodee fork and original Tape Workshop code in this release use AGPL-3.0-only, with Dex FM and Sloop FM6 under GPL-3.0-only. The latter use Leo Kuroshita and Hügelton Instruments' Sloop/Felucca FM6 port of the Apache-licensed msfa core. [Sloop/Felucca source](https://github.com/isod89/sloop-fm1)
-- The Open MPC wrapper retains its MIT terms. Afterglow Piano and Room Grand adapt Alexander Holm's [Salamander Grand Piano](https://github.com/sfzinstruments/SalamanderGrandPiano) under CC BY 3.0. Velvet Choir uses Karoryfer Samples' [CC0 vocal tutorial recordings](https://github.com/sfzinstruments/legato_vocal_tutorial).
+- Tape Workshop additions and branding: **bsauce42**. Melodee and sample-base are by **Kerem Kiliç (Ellic Studio)**. [Melodee notices](https://github.com/keremimo/melodee-sample/blob/main/THIRD_PARTY.md)
+- The Melodee fork and original Tape Workshop code use AGPL-3.0-only; Dex FM and Sloop FM6 retain GPL-3.0-only terms and Leo Kuroshita/Hügelton Instruments Sloop/Felucca and msfa attribution. [Sloop/Felucca source](https://github.com/isod89/sloop-fm1)
+- The Open MPC wrapper retains MIT terms. Afterglow Piano and Room Grand adapt Alexander Holm’s [Salamander Grand Piano](https://github.com/sfzinstruments/SalamanderGrandPiano) under CC BY 3.0. Velvet Choir uses Karoryfer Samples’ [CC0 vocal tutorial recordings](https://github.com/sfzinstruments/legato_vocal_tutorial).
 
-See `BUILD.md` inside the source archive for build instructions and the included notices for individual terms.
+See the included source, build scripts and component notices for individual terms.
