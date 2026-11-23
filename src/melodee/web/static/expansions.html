@@ -1,0 +1,24 @@
+<section id="expansion-builder" class="studio-page expansion-page">
+<header class="live-heading"><div><p class="kicker">EXPANSION BUILDER</p><h1>Eight banks.<br><span>Entirely your sound.</span></h1><p>Turn your samples into a kit worth keeping. Add a cover, make it yours, and take it to Tape Workshop.</p></div></header>
+<div class="expansion-workspace">
+  <section class="pack-instrument" aria-label="Sample pad bank">
+    <div class="instrument-heading"><div><span class="hardware-eyebrow">TAPE WORKSHOP</span><h2>Sample bank <span id="pack-bank-label">A</span></h2></div><span id="pack-count" class="hardware-count">0 / 128 assigned</span></div>
+    <div id="pack-banks" class="pack-banks" role="group" aria-label="Expansion banks A through H"></div>
+    <div class="pack-hardware"><div class="pad-deck-header"><span>PAD PLAY</span><span>16 SAMPLE SLOTS</span></div><div id="pack-pads" class="pack-pads" aria-label="Expansion pads, arranged like the MPC Sample"></div><div class="pad-deck-footer"><span id="pack-selection">Selected: A01</span><span class="hardware-lights" aria-hidden="true"><i></i><i></i><i></i></span></div></div>
+    <p class="pad-hint">Banks A–H hold 128 pads. Tap or click a pad to select it and play its sound. MPC pads play the bank selected here.</p>
+    <div class="pack-edit-actions"><button type="button" id="pack-mpc-pads" class="quiet" aria-pressed="false">Enable MPC pads</button><button type="button" id="pack-stop" class="quiet">Stop sounds</button></div>
+    <p id="pack-mpc-status" role="status">Preview sound plays on this phone or computer. Use an empty drum track on the MPC to avoid also hearing its current kit.</p>
+  </section>
+  <section class="pack-details" aria-label="Pack settings">
+    <div class="detail-heading"><p class="kicker">MAKE IT YOURS</p><h2>The details matter.</h2></div>
+    <div class="pack-fields"><label>Pack name<input id="pack-name" maxlength="60" placeholder="My drum kit" value="My drum kit"></label><label>Creator<input id="pack-author" maxlength="80" placeholder="Your name"></label></div>
+    <div class="pack-art-controls"><div class="cover-well"><img id="pack-cover" alt="Expansion cover preview" hidden><span aria-hidden="true" class="cover-empty">Your<br>cover art.</span></div><div><label class="button quiet">Add cover photo<input type="file" id="pack-cover-file" accept="image/png,image/jpeg,image/webp" hidden></label><button type="button" class="quiet" id="pack-cover-remove">Remove photo</button><p id="pack-cover-status" role="status">A square cover for your pack. Displayed in the OS expansion browser from v90.</p></div></div>
+    <label class="button add-samples">Add WAV samples<input id="pack-files" type="file" accept=".wav,audio/wav" multiple hidden></label>
+    <p id="pack-status" role="status">Choose a pad, then add a WAV. Multiple files fill successive pads across banks A–H.</p>
+    <div class="pack-edit-actions"><button id="pack-preview" class="quiet">Preview pad</button><button id="pack-clear" class="quiet">Clear pad</button></div>
+    <button id="pack-save-unit" class="pack-export">Save to MPC</button><button id="pack-export" class="quiet">Download a copy</button><p class="export-detail">Save the .xpn, samples and artwork to <strong>Expansion Packs</strong> on the MPC SD card, or download to your phone or computer. Existing packs are kept.</p>
+  </section>
+</div>
+<section class="pack-install-guide"><div><p class="kicker">FROM HERE TO YOUR HARDWARE</p><h2>Made to go with you.</h2><p>A few simple steps from your browser to your next session.</p></div><ol><li><strong>Save your pack.</strong><span>Choose Save to MPC to export directly to the SD card’s Expansion Packs folder.</span></li><li><strong>Keep another copy.</strong><span>Download a copy to your phone or computer anytime. Browse saved packs with <a href="/files">Files</a>.</span></li><li><strong>Make it part of your setup.</strong><span>In Tape Workshop, hold the encoder, choose HERE, then EXPANSIONS. Install the pack and import a bank or pad. In Melodee, open it in Sample Select.</span></li></ol></section>
+<p class="studio-note">Samples export at 44.1 kHz, 16-bit mono or stereo. Instrument plug-ins are not included. Built on Melodee by Kerem Kiliç (Ellic Studio).</p>
+</section>

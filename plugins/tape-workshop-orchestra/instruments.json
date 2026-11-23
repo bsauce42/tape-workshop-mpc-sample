@@ -1,0 +1,19 @@
+[
+  ["Violin Section", "ViolinEnsSusVib.sfz", "ViolinEnsSpic.sfz"],
+  ["Solo Violin", "SViolinVib.sfz", "SViolinPizz.sfz"],
+  ["Viola Section", "ViolaEnsSusVib.sfz", "ViolaEnsSpic.sfz"],
+  ["Cello Section", "CelloEnsSusVib.sfz", "CelloEnsSpic.sfz"],
+  ["Contrabass", "ContrabassSusVB.sfz", "ContrabassSpic.sfz"],
+  ["French Horn", "FHornSus.sfz", "FHornStac.sfz"],
+  ["Trumpet", "TrumpetSus.sfz", "TrumpetStac.sfz"],
+  ["Trombone", "TromboneSus.sfz", "TromboneStac.sfz"],
+  ["Tuba", "TubaSus.sfz", "TubaStac.sfz"],
+  ["Flute", "FluteSusVib.sfz", "FluteStac.sfz"],
+  ["Oboe", "OboeSusVib.sfz", "OboeStac.sfz"],
+  ["Clarinet", "ClarinetSus.sfz", "ClarinetStac.sfz"],
+  ["Bassoon", "BassoonSus.sfz", "BassoonStac.sfz"],
+  ["Timpani", "Timpani.sfz", "Timpani.sfz"],
+  ["Marimba", "Marimba.sfz", "Marimba.sfz"],
+  ["Glockenspiel", "Glockenspiel.sfz", "Glockenspiel.sfz"],
+  ["Tubular Bells", "TubularBells.sfz", "TubularBells.sfz"]
+]

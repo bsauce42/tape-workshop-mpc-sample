@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tape Workshop">
+<title>{{title}}</title>
+<link rel="apple-touch-icon" sizes="180x180" href="/app-icon-180.png?v=178">
+<link rel="manifest" href="/manifest.webmanifest?v=178">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/modern.css?v=181">
+<link rel="stylesheet" href="/browser-media.css">
+<link rel="icon" type="image/png" href="/app-icon-192.png?v=178">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="Tape Workshop home"><img src="/logo.png?v=178" width="300" height="41" alt="Tape Workshop"></a>
+  <nav class="tabs" aria-label="Pages">
+    <a href="/"{{device}}>Device</a>
+    <a href="/live"{{live}}>Live Screen</a>
+    <a href="/tutorial"{{tutorial}}>Tutorial Mode</a>
+    <a href="/expansions"{{expansions}}>Expansion Builder</a>
+    <a href="/files"{{files}}>Files</a>
+    <a href="/docs/quickstart"{{quickstart}}>Quickstart</a>
+    <a href="/docs/manual"{{manual}}>Manual</a>
+  </nav>
+  <div class="link" id="link" data-state="wait" title="Connection to the MPC">
+    <span class="led"></span><span class="word" id="link-word">MPC</span>
+  </div>
+</header>
+<aside class="update-alert" id="update-alert" hidden><a href="/#online-update">New update available</a></aside>
+<main>
+{{main}}
+</main>
+<footer class="site-credit">Tape Workshop by <a href="https://github.com/bsauce42" target="_blank" rel="noopener">bsauce42</a> · <a href="https://github.com/bsauce42/tape-workshop-mpc-sample" target="_blank" rel="noopener">GitHub project</a> · <a href="https://github.com/bsauce42/tape-workshop-mpc-sample/issues" target="_blank" rel="noopener">Report an issue</a><br>Built on Melodee by Kerem Kiliç (Ellic Studio). <a href="/docs/manual">About &amp; guide</a></footer>
+<script src="/release-logic.js" defer></script>
+<script src="/animated-scenes.js" defer></script>
+<script src="/tutorial-presentation.js" defer></script><script src="/photo-layout.js" defer></script>
+<script src="/recording-policy.js" defer></script>
+<script src="/recording-store.js" defer></script>
+<script src="/stereo-recording.js" defer></script>
+<script src="/app.js?v=184" defer></script>
+<script src="/display-only.js" defer></script>
+<script src="/updates.js" defer></script>
+<script src="/expansion-core.js" defer></script>
+<script src="/expansion-save.js"></script>
+<script src="/expansion-play.js"></script>
+<script src="/companion.js" defer></script>
+<script src="/personalize.js" defer></script>
+<script src="/browser-media-core.js" defer></script>
+<script src="/browser-media.js" defer></script>
+</body>
+</html>

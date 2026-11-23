@@ -1,0 +1,245 @@
+# Projects and files
+
+Previous: [MIDI and sync](midi-and-sync.md) · [Contents](../GUIDE.md) · Next: [Settings](settings.md)
+
+## The Project page
+
+Press **SHIFT** + **Pad 16**.
+
+![Project](../images/screens/project.png)
+
+- **B1** (**SAVE AS**): save the project under a new name. The old file
+  stays as it was.
+- **B2** (**OPEN**): the list of projects.
+- **B3** (**NEW**): start a new project (asks first). The question says
+  whether the open project is saved first or its changes are lost.
+  **B3** (**NEW**) starts it with no tracks and opens the track types on
+  track 1. **B2** (**KIT**) starts it with one of the MPC's factory kits on
+  track 1, so the pads play at once. **B1** cancels.
+
+Or turn the encoder to pick one and push it.
+
+### Saving
+
+Melodee saves the project in the background, as the stock app does. Three
+seconds after you last used a control it writes the project to its file, as
+long as nothing plays, records or prints. A new project gets a file of its
+own the first time: **Project 1**, **Project 2** and so on.
+
+- The Project page shows **SAVED**, or **UNSAVED** until the next save.
+- While the sequencer plays, nothing is saved. Stop, and the save follows.
+- An MPC project you open is not saved in the background. Press **B1**
+  (**SAVE AS**) to give it a file of its own.
+- The Exit screen saves before it powers off or leaves.
+- Undo and redo are not saved with the project.
+- To keep an earlier state, press **B1** (**SAVE AS**) before you go on.
+
+To save only when you choose, turn **Autosave** off in
+[Settings](settings.md) (**SEQ**). Then:
+
+- **B1** reads **SAVE** and writes the project to its file. A project
+  with no file yet still gets **SAVE AS**.
+- To go back to what was last saved, open the list, push the open project
+  and pick **REVERT** (**TO SAVED**). Push it again to confirm.
+- **NEW**, **LOAD** of another project and the Exit screen don't save.
+  While the project has changes they say **DISCARDS** (**LOAD**: **CHANGES
+  LOST**), and **LOAD** asks once more.
+
+The header shows **UNSAVED** in amber while the project has changes.
+
+A sample's chop is saved in the sample's WAV file, as the MPC saves slices:
+the slices, the chop type and the cuts made by hand. The chop comes back
+with the sample in any project.
+
+![The project list](../images/screens/projectlist.png)
+
+In the list:
+
+- Turn the encoder to move. **K1** jumps, **K2** sorts.
+- Push the encoder or press **B3** to open a folder. **B1** goes back.
+  At the top of `Melodee/Projects`, **B1** goes up to the card's own folders,
+  so a project or kit anywhere on the card can be loaded. At the card's top,
+  **B1** closes the list.
+- **B2** switches between the card and the MPC's internal drive
+  (**INTERNAL**). The internal drive holds the stock app's projects, its
+  **Autosave**, and the factory **Demos** and **Kits**. It is read only:
+  its projects have Load and Load kit.
+- The list opens on the open project the first time, then where you left
+  it. Each drive keeps its own folder and row.
+- Push the encoder or press **B3** on a project to open its sheet. Its jobs
+  are cards. The open project has Save, Save as new, Rename, Duplicate,
+  Move to folder, New folder here, Open at start and Delete. Another
+  project has Load and **Load kit** (no patterns) first, which loads its
+  first kit onto the selected track.
+- Save (or Load) is picked when the sheet opens. Turn the encoder to pick
+  another card and push it. **B1** closes the sheet. Delete says **PRESS
+  AGAIN**: push once more to delete.
+- **ERASE** on a project opens its sheet on Delete. Press **ERASE** again
+  to delete it. **SHIFT** + **ERASE** duplicates it.
+
+![A project's sheet](../images/screens/filesheetscroll.png)
+
+While a project loads, a Loading sheet shows its progress. The audio fades
+out and back in.
+
+## Naming
+
+The Name sheet opens when you save or rename a project, sample, sound, bank,
+marker, sequence or track.
+
+![The Name sheet](../images/screens/nameproject.png)
+
+- The pads type like phone keys. Each pad shows the letter it types next.
+  Pad 14 types a space, pad 15 switches to digits, pad 16 deletes.
+- Turn the encoder to move the cursor. **K1** chooses a suggested name.
+- **K2**, or **SHIFT** + encoder, changes the character under the cursor.
+- **ERASE** deletes. **SHIFT** + **ERASE** clears the name.
+- **B2** switches between capitals and lower case.
+- **B3** (**SAVE**) or encoder push saves. **B1** cancels.
+
+## MPC Sample projects
+
+Melodee opens stock MPC Sample projects (`.xpj`), wherever they are on the
+card. When the card has the stock app's `MPC-Sample/Projects` folder, the
+project list shows it as the **MPC Sample** folder. Press **B2**
+(**INTERNAL**) for the projects on the MPC's internal drive, with the
+factory demos and kits.
+
+Their sheet has Load and Load kit. Load opens a copy. The stock project is
+not changed. **SAVE AS** on the Project page makes a Melodee project
+(`.mldp`) that plays the samples from where they are.
+
+- Each Drum track becomes a kit track. Each sequence becomes that numbered
+  pattern, with its tempo. A sequence's name becomes its name on
+  **Sequences** (a default name, such as *Sequence 01*, stays blank).
+- The song becomes **Song** (see [Song](song.md)):
+  - Each step becomes a clip on each track that has notes in its sequence.
+    A track with no notes in that sequence gets no clip there.
+  - A clip is as long as the sequence times its repeats. The steps follow
+    one another from bar 1.
+  - Each step has a marker with its sequence's name, or **SEQ** and its
+    number.
+  - When the sequences have their own tempos, the tempo lane changes the
+    tempo where a step's tempo differs from the step before. With one
+    global tempo, or **Ignore Tempo** on, the song has no tempo lane.
+  - Melodee has one song. When the project has more than one song with
+    steps, the first opens. The message after loading says when something
+    was left out.
+- MPC 3 projects open the same way. Their Keygroup tracks become keygroup
+  tracks, and their Audio tracks become audio tracks (see
+  [Audio tracks](audio-tracks.md)).
+- Carried over: pad regions, tune, volume, pan, play type, mono, mute
+  group, envelope, loop, Warp, filter, and pads with several layers.
+- Not carried over: Pad FX, insert effects and sends.
+
+## SD card access
+
+Connect the MPC to a computer to copy files to and from the card, without
+taking it out.
+
+1. Connect the MPC to the computer with a USB-C cable.
+2. Open the project list (**SHIFT** + **Pad 16**, **B2**) and push the
+   encoder on **SD card access** at the top.
+3. The card appears on the computer as a drive. Copy your files.
+4. Eject the drive on the computer.
+5. Press **B1** (**EJECT**). Melodee reads the card again.
+
+![SD card access](../images/screens/cardaccess.png)
+
+While the card is mounted on the computer, the pads still play the selected
+track, and **PLAY**, **STOP** and **MAIN VOLUME** still work. The other
+controls wait. USB audio and USB MIDI keep working. If you press **B1**
+before you eject the drive, the page shows **STILL MOUNTED**. Press **B1**
+again and Melodee asks whether to eject anyway.
+
+## Files on the card
+
+| Folder | Contents |
+| --- | --- |
+| `autorun/` | Melodee itself. Do not change it. |
+| `Melodee/Samples/` | Your samples. Melodee writes `Recorded/`, `Edits/`, `Banks/`, `Looper/`, `Expansions/`, `Keygroups/` (auto sampled programs) and `Stems/` (a sample's stems) here. |
+| `Melodee/Projects/` | Projects (`.mldp`), and each project's `Loops`, `Prints` and `Audio` folders |
+| `Melodee/Mixdowns/` | Song mixdowns |
+| `Melodee/Stems/` | A song's stems |
+| `Melodee/MIDI/` | Exported MIDI files |
+| `Melodee/MPC 3/` | MPC 3 projects exported from Song |
+| `Melodee/Ableton/` | Ableton Live Sets exported from Song, a folder each |
+| `Melodee/Progressions/` | Chord progressions you make |
+| `Melodee/Sounds/` | Sounds you save |
+| `Melodee/Cache/` | Decoded instrument samples, and long MP3, FLAC, Ogg and AIFF samples as WAV. Safe to delete: Melodee makes them again. |
+| `Melodee/Plugins/` | VST3, LV2, CLAP and VST2 plug-ins |
+| `Melodee/Plugin Data/` | Plug-in settings and presets |
+| `Melodee/Crashes/` | Crash reports, one file a crash (see [Troubleshooting](exit-and-troubleshooting.md#troubleshooting)) |
+| `Melodee/SysEx/` | `.syx` files for MIDI tracks |
+| `Melodee/settings` | Melodee's settings |
+
+Melodee makes no other folders at the top of the card. `Samples/` and
+`SysEx/` there, where older versions kept them, are still read. Move what
+is in `Samples/` into `Melodee/Samples`, and projects find their samples in
+the new place.
+
+## The web page
+
+Tape Workshop’s local companion uses your Sixth Street Bridge artwork and is served by your MPC, without changing Melodee’s public website. With a USB-C data cable connected to your iPhone, open **http://192.168.155.1/** in Safari. The same page is available to a computer connected by USB-C.
+
+Choose **Live Screen** to view the current Tape Workshop display. It refreshes up to five times per second while the page is visible. **Pause** holds the last image, **Full screen** hides the page controls and fits the viewer to your phone display, preserving its proportions. **Exit full screen** returns to the page; Escape also exits on a computer. On browsers that support it, the browser bars disappear too. On iPhone, adding the page to your Home Screen gives it a separate app-style window. **Save screenshot** downloads a PNG. The viewer supports rotation. On iPhone, open that image and use Share to save or send it. Rotating the phone also makes the display larger. A lost connection retries automatically.
+
+Choose **Tutorial** for a large live display on the left and a live MPC Sample illustration on the right. The illustration has the same screen in its display and highlights physical button presses, pads, knob turns, the Data wheel and the fader. A caption names the most recent action, including Shift combinations. Short presses stay highlighted briefly so a recording can catch them. Startup knob positions appear when supplied by the hardware.
+
+Choose **Device style → Detailed** for the smooth hardware illustration, or **Pixel Art** for a blocky style. Both follow the same controls and live screen, and your browser remembers the choice.
+
+Tap **Clean recording view** to hide the page controls. Use **Record Tutorial** to capture the tutorial view and direct MPC sound together. You can also use a phone or computer screen recorder after enabling MPC audio. The tutorial viewer follows the real MPC’s controls. On a phone, landscape shows both displays side by side and portrait stacks them. Pause holds the display and hardware illustration together.
+
+The viewer can stream both the screen and direct stereo sound from the MPC. Its physical controls remain in use. Capture stops shortly after the page is hidden or closed. Safari’s Share menu can add the page to your Home Screen.
+
+### Record video and direct MPC audio
+
+In Live Screen or Tutorial, press **Record Tutorial**. This enables the MPC audio stream and starts a clean 1280×720 video with stereo sound. Tutorial includes the large screen, the selected device illustration and action captions. The plain Live Screen view records the display. No microphone or external audio interface is used.
+
+Press **Stop recording**, preview the take and tap **Save recording**. The browser prefers H.264/AAC MP4 when supported and falls back to a supported video format. Keep Safari visible during the take. Takes stop at five minutes or the browser recording size limit. If the connection or sample rate changes, recording stops and keeps the completed portion for saving; check any take with an interruption message.
+
+**Enable MPC audio** lets you listen without recording. **Stop MPC audio** ends the stream. One browser audio session is supported at a time. The stream follows the MPC’s final stereo output and main volume, so a muted main output records silence. The phone uses a short playback buffer and delays the displayed screen and control highlights on the same sample timeline. Hardware screen updates still arrive at up to five frames per second.
+
+Recording requires Web Audio, canvas capture and MediaRecorder support. If the browser cannot produce a combined video, it explains this; you can enable MPC audio and use your device’s screen recorder instead. iPhone Safari recording and playback need verification on the actual phone and MPC.
+
+This companion is part of Tape Workshop, built on Melodee by Kerem Kiliç (Ellic Studio). The original file, plug-in, sample-search and update tools remain available.
+
+
+While Melodee runs, connect the MPC to a computer with USB-C and open
+**http://192.168.155.1/** in a browser. It has
+the following tabs:
+
+- **Device**: the version running, the card's free space and the plug-ins
+  in `Melodee/Plugins`. Check your GitHub release under **Tape Workshop updates**, or choose a signed ZIP in **Manual install** and press
+  **Send** (see [Update Tape Workshop](#update-tape-workshop)), or a plug-in's
+  `-mpc-sample.zip` on **Plug-ins** and press **Install** (see
+  [What runs](plug-ins.md#what-runs)).
+- **Files**: the folders on the card. Play audio files in the browser,
+  download files, upload files (with **Upload** or by dropping them on the
+  list), make folders and delete files or folders. The browser asks before
+  it deletes. An upload never replaces a file of the same name. The
+  `autorun` folder is not shown.
+- **Quickstart** and **Manual**: the quickstart and this guide. They work
+  without an internet connection.
+
+Uploads wait while the card is on a computer with SD card access. When
+Melodee stops, the MPC's own web page comes back.
+
+## Update Tape Workshop
+
+The page links to [bsauce42’s Tape Workshop project](https://github.com/bsauce42/tape-workshop-mpc-sample), releases and issue reports. When the MPC connects, the phone or computer checks that repository for a newer release. **Check now** repeats the check. Your phone or computer needs internet access; the MPC uses its USB-C link.
+
+1. Install v79 once by the usual SD-card method: unzip the build and copy its `autorun` folder to the card. Earlier Tape Workshop builds use Melodee’s release key and cannot accept the new Tape Workshop-signed update through the webpage.
+2. On v79 or later, open the Device page. A newer published release shows **New update available**. **Download to MPC** transfers its signed update ZIP. **Download ZIP** downloads it to your phone or computer instead.
+3. For offline or manual installation, choose a newer `Tape-Workshop-vNN-Signed-Update.zip` under **Manual install** and press **Send**, or copy the ZIP to the card’s top level. Do not unzip it for this update path.
+4. Choose **Install downloaded update** on the page, or press **B3 / INSTALL** on the MPC. A web request waits until playback and recording have stopped. Save a new, unnamed project first; an existing project is saved before installation.
+5. Optional settings enable **Automatically download new updates** and **Install automatically when playback stops**. They are off initially and saved by your browser. A queued installation can be cancelled from the page; **B1 / LATER** on the MPC also declines the offer.
+6. The updater verifies the signed file list, self-tests the new application, installs it and restarts. It retains the previous version in `autorun/melodee.prev` and restores it if startup fails. Changed or unsigned ZIPs are rejected.
+
+![Update question](../images/screens/updateask.png)
+
+Automatic transfer uses the published GitHub release asset or its browser-readable mirror on the repository’s `updates` branch. If transfer is unavailable, use **Download ZIP** and **Manual install**. Publishing and signing instructions are in `docs/development/workshop-updates.md` in the corresponding source archive.
+
+---
+
+Previous: [MIDI and sync](midi-and-sync.md) · [Contents](../GUIDE.md) · Next: [Settings](settings.md)

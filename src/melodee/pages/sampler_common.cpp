@@ -1,0 +1,316 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+#include "melodee/pages/sampler_common.h"
+#include "melodee/ui/widgets.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+
+namespace melodee {
+namespace {
+using namespace ui;
+// Stage's kit groups (shell/sampler_map.h): B1 the sample, B2 how it plays, B3 its mix and filters.
+constexpr const PageId* order = sampler_order;
+const char* keys[sampler_page_count] {"TRIM", "LAYERS", "TUNE", "AMP ENV", "PLAY", "FOLLOW", "CLOUD", "MIX", "FILTER", "FILT ENV", "KIT FILT"};
+const char* titles[sampler_page_count] {"Trim", "Layers", "Tune", "Amp env", "Play", "Follow", "Cloud", "Mix", "Filter", "Filter env", "Kit filter"};
+} // namespace
+
+// A group's key: the page in view, else the group's first page; a dot a page under it, as on Stage.
+SoftKeys sampler_keys(PageId page, juce::Colour c) {
+    unsigned n = sampler_index(page), here = sampler_group(n);
+    std::array<juce::String, 3> labels;
+    SoftKeys out {labels, int(here), c};
+    for (unsigned g = 0; g < sampler_groups; ++g) {
+        unsigned first = sampler_group_first(g), size = sampler_group_size(g);
+        out.labels[g] = keys[g == here ? n : first];
+        out.dots[g] = uint8_t(size);
+        out.dot_at[g] = uint8_t(g == here ? n - first : 0);
+    }
+    return out;
+}
+
+void sampler_soft(Context& c, int key) {
+    c.open(sampler_next(c.ui.page, unsigned(key)));
+    c.ui.sampler_row = 0;
+}
+
+// Push: the page map of all of them (as Edit's), the wheel moves, Push jumps; Shift + Push or a B key closes it.
+void sampler_push(Context& c) {
+    if (!c.ui.map_open) { c.ui.map_open = true; c.ui.map_cursor = uint8_t(sampler_index(c.ui.page)); return; }
+    c.ui.map_open = false;
+    c.open(order[c.ui.map_cursor % sampler_page_count]);
+    c.ui.sampler_row = 0;
+}
+
+bool sampler_map_wheel(Context& c, int delta) {
+    if (!c.ui.map_open) return false;
+    c.ui.map_cursor = uint8_t(std::clamp<int>(c.ui.map_cursor + delta, 0, int(sampler_page_count) - 1));
+    return true;
+}
+
+void sampler_wheel(Context& c, int delta) { sampler_map_wheel(c, delta); }
+
+// The map over the picture: three columns, one a B key, its pages under it.
+void draw_sampler_map(Paint& p, const Snapshot& s) {
+    if (!s.ui.map_open || !is_sampler_page(s.ui.page)) return;
+    auto c = colour_of(s);
+    p.dim_zone(zone::picture_y, zone::picture_h, 0.75f);
+    float px = zone::pad, pw = zone::width - 2 * zone::pad, py = zone::picture_y + 2, ph = zone::picture_h - 4;
+    p.fill(px, py, pw, ph, colour::surf, 6);
+    p.ring(px, py, pw, ph, colour::line, 6);
+    float cw = (pw - 16) / 3, rh = 19;
+    static const char* names[sampler_groups] {"B1", "B2", "B3"};
+    unsigned here = sampler_index(s.ui.page);
+    for (unsigned g = 0; g < sampler_groups; ++g) {
+        float x = px + 5 + g * (cw + 3);
+        p.text(names[g], x + 4, py + 3, cw - 8, 14, caps_text(colour::mid));
+        for (unsigned k = 0; k < sampler_group_size(g); ++k) {
+            unsigned n = sampler_group_first(g) + k;
+            float y = py + 18 + k * (rh + 2);
+            bool on = n == s.ui.map_cursor;
+            if (on) p.fill(x, y, cw, rh, c, 4);
+            else if (n == here) p.ring(x, y, cw, rh, colour::line, 4);
+            p.text(juce::String(n + 1), x + 4, y, 15, rh, plain(on ? colour::bg : colour::dim, type::small, Weight::SemiBold));
+            p.text(titles[n], x + 20, y, cw - 22, rh, p.fit(titles[n], plain(on ? colour::bg : colour::sec, type::small, Weight::Medium), cw - 22, type::floor));
+        }
+    }
+}
+
+const PadSound& sampler_pad(const Snapshot& s) { return s.track().pads[s.track().last_pad % sampler_pads]; }
+
+juce::Colour pad_colour(const Snapshot& s, unsigned kit) {
+    uint32_t own = s.track().pads[kit % sampler_pads].colour;
+    return own ? (themed() ? ui::pad_track_ink(own) : ui::screen_colour(own)) : colour_of(s);
+}
+
+juce::Colour ink_on(juce::Colour fill) {
+    if (ui::lcd_ink_theme()) return ui::colour::bg;
+    return fill.getPerceivedBrightness() > 0.55f ? ui::colour::bg : ui::colour::text;
+}
+
+juce::String sampler_pad_pill(const Snapshot& s) {
+    const auto& t = s.track();
+    char label[4]; pad_label(t.last_pad, label);
+    const auto& pad = sampler_pad(s);
+    return juce::String("PAD ") + juce::String(label)
+         + (pad.used() ? juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(s.project.samples[pad.sample % sample_slots].name) : juce::String());
+}
+
+float pad_icons(Paint& p, float x, float y, const PadSound& pad, juce::Colour c) {
+    p.g.setColour(c);
+    if (pad.play == PadPlay::Gate) { // Note On: a note
+        p.g.fillEllipse(x + 1, y + 6, 4.4f, 3.4f);
+        p.g.fillRect(x + 4.6f, y + 0.5f, 1.1f, 7.2f);
+        p.g.fillRect(x + 4.6f, y + 0.5f, 3.2f, 1.3f);
+        x += 11;
+    }
+    if (pad.loop) { // Loop: a ring with an arrowhead
+        juce::Path loop;
+        loop.addCentredArc(x + 5.5f, y + 5, 4, 3.4f, 0, 0.6f, 5.6f, true);
+        p.g.strokePath(loop, juce::PathStrokeType(1.3f));
+        juce::Path head;
+        head.addTriangle(x + 7.2f, y + 0.8f, x + 9.6f, y + 2.6f, x + 6.8f, y + 3.8f);
+        p.g.fillPath(head);
+        x += 13;
+    }
+    if (pad.reverse) { // reverse: an arrow pointing back
+        juce::Path arrow;
+        arrow.startNewSubPath(x + 10, y + 5); arrow.lineTo(x + 2, y + 5);
+        arrow.startNewSubPath(x + 5, y + 2); arrow.lineTo(x + 2, y + 5); arrow.lineTo(x + 5, y + 8);
+        p.g.strokePath(arrow, juce::PathStrokeType(1.3f));
+        x += 13;
+    }
+    return x;
+}
+
+void sampler_top(Paint& p, const Snapshot& s, const juce::String& pill_text, bool rows) {
+    auto c = colour_of(s);
+    unsigned n = sampler_index(s.ui.page);
+    Header h = header_of(s);
+    if (pill_text.isNotEmpty()) h.left.push_back(pill(pill_text, c));
+    h.right.push_back(tag_of(s, s.ui.track));
+    frame(p, s, sampler_keys(s.ui.page, c), h);
+    float title_w = p.text(titles[n], zone::pad, zone::picture_y, 200, 22, plain(colour::text, type::title, Weight::SemiBold));
+    if (s.track().engine == EngineKind::Sampler && sampler_pad(s).used())
+        pad_icons(p, zone::pad + title_w + 8, zone::picture_y + 6, sampler_pad(s), colour::sec);
+    if (rows) {
+        float dots = page_dots(p, zone::width - zone::pad, zone::picture_y + 11, 2, s.ui.sampler_row, c, true);
+        p.text("ROW " + juce::String(s.ui.sampler_row + 1) + " / 2", zone::pad, zone::picture_y, zone::width - 2 * zone::pad - dots - 6, 22,
+               caps_text(colour::mid), juce::Justification::centredRight);
+    }
+}
+
+void sampler_pills(Paint& p, float y, std::initializer_list<juce::String> texts, juce::Colour first) {
+    float x = zone::pad;
+    bool lead = true;
+    for (const auto& t : texts) {
+        auto style = caps_text(lead ? first : colour::mid);
+        float w = p.width(t, style) + 8;
+        if (x + w > zone::width - zone::pad) report_text_issue({t, style.size, x + w - zone::pad, zone::width - 2.0f * zone::pad}); // the row runs off the screen
+        p.fill(x, y, w, 15, colour::surf, 3);
+        p.text(t, x, y, w, 15, style, juce::Justification::centred);
+        x += w + 4; lead = false;
+    }
+}
+
+void draw_filter_curve(Paint& p, float x, float y, float w, float h, unsigned shape, unsigned poles, float cutoff, float q,
+                       juce::Colour c, juce::Colour marker, bool labels) {
+    juce::Path line, area;
+    float cx = x;
+    for (int n = 0; n <= 120; ++n) {
+        float hz = 20.0f * std::pow(1000.0f, n / 120.0f), r = hz / cutoff;
+        float lp = 1 / std::sqrt((1 - r * r) * (1 - r * r) + (r / q) * (r / q));
+        float gain = shape == 1 ? lp * r / q : shape == 2 ? lp * r * r : lp;
+        if (poles == 4) gain = gain * (shape == 1 ? lp * r : shape == 2 ? lp * r * r : lp) / std::max(1.0f, q * 0.7f);
+        float db = 20 * std::log10(std::max(gain, 1e-4f));
+        float px = x + w * n / 120.0f, py = y + h - std::clamp((db + 30) / 45, 0.0f, 1.0f) * h;
+        if (n == 0) { line.startNewSubPath(px, py); area.startNewSubPath(px, y + h); }
+        line.lineTo(px, py); area.lineTo(px, py);
+        if (hz <= cutoff) cx = px;
+    }
+    area.lineTo(x + w, y + h); area.closeSubPath();
+    p.g.setColour(c.withAlpha(0.14f)); p.g.fillPath(area);
+    p.g.setColour(c); p.g.strokePath(line, juce::PathStrokeType(1.5f));
+    p.fill(cx, y, 1, h, marker);
+    if (!labels) return;
+    auto axis = plain(colour::dim, type::small, Weight::SemiBold); // units as written
+    p.text("20 Hz", x, y + h + 3, 44, 12, axis); p.text("200 Hz", x + w / 3 - 18, y + h + 3, 50, 12, axis);
+    p.text("2 kHz", x + 2 * w / 3 - 16, y + h + 3, 50, 12, axis); p.text("20 kHz", x + w - 50, y + h + 3, 50, 12, axis, juce::Justification::centredRight);
+}
+
+void draw_envelope(Paint& p, float x, float y, float w, float h, double length, double a, double d, float sustain, double r, bool fade_end,
+                   unsigned track, float soft) {
+    length = std::max(length, 0.01);
+    auto x_of = [&](double t) { return x + float(std::clamp(t / length, 0.0, 1.0)) * w; };
+    float top = y + 2, base = y + h - 2;
+    struct Seg { double t0, t1; float l0, l1; unsigned knob; };
+    std::array<Seg, 4> segs;
+    if (fade_end) { // held at the top, then faded over the decay before the end
+        double from = std::max(a, length - d);
+        segs = {Seg {0, a, 0, 1, 0}, Seg {a, from, 1, 1, 3}, Seg {from, length, 1, 0, 1}, Seg {0, 0, 0, 0, 3}};
+    } else {
+        segs = {Seg {0, a, 0, 1, 0}, Seg {a, a + d, 1, sustain, 1}, Seg {a + d, std::max(a + d, length - r), sustain, sustain, 3},
+                Seg {std::max(a + d, length - r), length, sustain, 0, 2}};
+    }
+    auto shape = [&](float scale) { // the whole envelope at `scale` of full height, as one path
+        juce::Path path;
+        path.startNewSubPath(x_of(0), base);
+        for (const auto& sg : segs) {
+            if (sg.t1 <= sg.t0) continue;
+            path.lineTo(x_of(sg.t1), base - sg.l1 * scale * (base - top));
+        }
+        return path;
+    };
+    // The softer hit (K3, velocity): the same shape lower, dashed; then the envelope's area, faint.
+    if (soft < 0.99f) {
+        juce::Path dashed;
+        juce::PathStrokeType(1.3f).createDashedStroke(dashed, shape(soft), std::array<float, 2> {3, 3}.data(), 2);
+        p.g.setColour(knob_shade(track, 2)); p.g.fillPath(dashed);
+    }
+    juce::Path area = shape(1);
+    area.lineTo(x_of(length), base); area.closeSubPath();
+    p.g.setColour(track_colour(track).withAlpha(0.1f)); p.g.fillPath(area);
+    // Each part in the colour of the knob that moves it, with a handle where the knob's part ends.
+    auto y_of = [&](float l) { return base - l * (base - top); };
+    for (const auto& sg : segs) {
+        if (sg.t1 <= sg.t0) continue;
+        p.g.setColour(sg.knob == 3 ? colour::mid : knob_shade(track, sg.knob));
+        p.g.drawLine(x_of(sg.t0), y_of(sg.l0), x_of(sg.t1), y_of(sg.l1), 2);
+    }
+    for (const auto& sg : segs)
+        if (sg.t1 > sg.t0 && sg.knob < 2) p.circle(x_of(sg.t1), y_of(sg.l1), 3.5f, knob_shade(track, sg.knob));
+}
+
+void sampler_rows_wheel(Context& c, int delta) {
+    if (sampler_map_wheel(c, delta)) return;
+    c.ui.sampler_row = uint8_t(std::clamp(c.ui.sampler_row + delta, 0, 1));
+}
+void sampler_bank(Context& c, int way) { c.track().bank = uint8_t((c.track().bank + sampler_banks + way) % sampler_banks); }
+
+ui::WaveSides wave_sides(const Snapshot& s) {
+    ui::WaveSides sides;
+    if (!s.sample.stereo) return sides;
+    for (unsigned side = 0; side < 2; ++side) {
+        sides.overview[side] = &s.sample.sides[side];
+        if (s.detail_to > s.detail_from) sides.detail[side] = &s.detail_sides[side];
+    }
+    return sides;
+}
+
+const PlayHead* pad_head(const Snapshot& s, unsigned pad, const PadSound& sound, uint32_t frames, ui::WaveHead& out) {
+    if (!frames) return nullptr;
+    for (const auto& head : s.heads) {
+        if (!head.shown() || head.pad != int(pad) || head.slot != sound.sample || (head.flags & tap::Cloud)) continue;
+        uint32_t wake_from = head.reverse() ? head.to : head.pass && (head.flags & tap::Loop) ? head.loop_at : head.from;
+        out.at = float(head.at / frames);
+        out.wake_from = float(wake_from) / float(frames);
+        out.strength = head.level;
+        out.wake = head.wake;
+        return &head; // newest first
+    }
+    return nullptr;
+}
+
+StageHeads stage_heads(const Snapshot& s, unsigned pad, const PadSound& sound, uint32_t frames) {
+    StageHeads out;
+    if (!frames) return out;
+    PadVoices voices = pad_voices(s.heads, int(pad), sound); // any of its layers' voices: a layered pad plays another sample each hit
+    out.sounding = voices.sounding;
+    // The region the picture shows: the pad's own (its first layer's).
+    const uint32_t shown_to = sound.end ? std::min(sound.end, frames) : frames, shown_from = std::min(sound.start, shown_to);
+    for (unsigned n = 0; n < voices.count; ++n) {
+        const PlayHead& head = *voices.head[n];
+        auto& wave = out.wave[out.count++];
+        const bool other = head.slot != sound.sample; // a voice on another layer's sample: as far through the region shown as through its own
+        const float lo = float(shown_from) / float(frames), hi = float(shown_to) / float(frames);
+        wave.at = other ? (head.reverse() ? hi - head_through(head) * (hi - lo) : lo + head_through(head) * (hi - lo)) : float(head.at / frames);
+        wave.strength = voice_strength(head, n == 0);
+        wave.wake_from = wave.at;
+        if (n) continue; // older voices: a head, no wake
+        out.newest = &head;
+        wave.wake = head.wake;
+        if (other) { wave.wake_from = head.reverse() ? hi : lo; continue; }
+        bool round = head.pass && (head.flags & tap::Loop);
+        wave.wake_from = float(head.reverse() ? head.to : round ? head.loop_at : head.from) / float(frames);
+        if (round && !head.reverse() && head.loop_at > head.from) // the first pass's part before the loop point
+            out.wave[out.count++] = {float(head.loop_at) / float(frames), float(head.from) / float(frames), 0, head.wake * 0.5f};
+    }
+    return out;
+}
+
+CloudGrains cloud_grains(const Snapshot& s, unsigned pad, const PadSound& sound, uint32_t frames, float from, float to, float w) {
+    CloudGrains out;
+    if (!frames) return out;
+    out.view = cloud_view(s.heads, s.grains, int(pad), sound.sample);
+    // A grain reads a few milliseconds of the file: widen its lit stretch by half a bar's column so it meets one.
+    const float reach = (to - from) * 1.5f / std::max(1.0f, w);
+    double sum = 0;
+    unsigned live = 0;
+    for (unsigned n = 0; n < out.view.count; ++n) {
+        const GrainPlace& g = *out.view.grains[n];
+        if (!g.live()) continue;
+        sum += g.at; ++live;
+        if (g.window < 0.2f) continue;
+        float a = float(g.from / frames), b = float(g.at / frames);
+        out.wakes[out.wake_count++] = {std::max(a, b) + reach, std::min(a, b) - reach, 0, g.window, false};
+    }
+    if (out.view.voice) out.centre = out.view.voice->at;
+    else if (live) out.centre = sum / live;
+    return out;
+}
+
+void draw_grains(ui::Paint& p, float x, float y, float w, float h, float from, float to, uint32_t frames, const CloudGrains& cloud,
+                 juce::Colour shade) {
+    if (!frames) return;
+    auto x_of = [&](double at) { return x + float((at / frames - from) / std::max(1e-6f, to - from)) * w; };
+    for (unsigned n = cloud.view.count; n-- > 0;) { // oldest first, so the newest lie on top
+        const GrainPlace& g = *cloud.view.grains[n];
+        float a = grain_alpha(g);
+        if (a <= 0.01f) continue;
+        float x0 = x_of(g.from), x1 = std::max(x0 + 5, x_of(g.at) + 2);
+        float gy = y + h / 2 + (grain_lane(g.serial) - 0.5f) * 0.75f * h;
+        p.fill(x0, gy - 1.5f, x1 - x0, 3, shade.withAlpha(a), 1.5f);
+    }
+}
+
+} // namespace melodee

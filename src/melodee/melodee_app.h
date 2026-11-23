@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+#pragma once
+#include "melodee/engine/engine_host.h"
+#include "melodee/shell/input_route.h"
+#include "melodee/shell/project_store.h"
+#include "melodee/shell/card_warm.h"
+#include "melodee/shell/sample_library.h"
+#include "melodee/plugin/plugin_rack.h"
+#include "melodee/shell/print_engine.h"
+#include "melodee/shell/looper_jobs.h"
+#include "melodee/shell/shell.h"
+#include "melodee/shell/snapshot.h"
+#include "melodee/ui/boot.h"
+#include "melodee/web/web_app.h"
+#include "drivers/platform.h"
+#include "drivers/sd_update.h"
+#include "drivers/usb_audio.h"
+#include "runtime/app.h"
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+// Melodee on sample-base (docs/MELODEE.md). This class only hands each
+// runtime hook to its owner: the engine host renders, the shell takes the
+// controls and lights, the pages draw a snapshot.
+class MelodeeApp : public App {
+public:
+    MelodeeApp();
+    void render(const AudioBlock& input, AudioBlock& output) override; // audio thread
+    AudioFormat audio_format() const override { return {shell.audio_rate(), shell.audio_periods()}; } // any thread: Settings'
+    void audio_opened(const AudioFormat& format) override;              // audio thread
+    ScreenMirrorMode screen_mirror() const override { return shell.screen_mirror(); } // any thread: Settings' Screen Mirror
+    const UsbStems* stems() const override { return &stem_block; }    // audio thread
+    const AudioBlock* usb_mix() const override { return usb_full ? &usb_block : nullptr; } // audio thread: Settings' USB volume
+    void surface(const SurfaceEvent& event) override;                   // MIDI thread
+    void lights(SurfaceLights& lights, Clock::time_point now) override; // MIDI thread
+    void midi(const MidiPortInfo& port, const MidiPacket& packet) override; // MIDI thread: external MIDI in (parity phase 9)
+    void midi_lost() override;                                             // MIDI thread
+    void midi_output(MidiOutput& out, Clock::time_point now) override;   // MIDI thread: MIDI out and the sync jack, timed
+    void draw(juce::Graphics& g) override;                              // screen thread
+    void service(Hardware& hardware) override;                          // service thread
+    void jack(const JackEvent& event, Hardware& hardware) override;     // service thread
+    std::string command(const std::string& action, const std::string& argument, Hardware&) override;
+    std::string command_names() const override { return "melodee-press, melodee-midi, melodee-update, melodee-print, melodee-freeze, melodee-unfreeze, melodee-autosample, melodee-usb-input"; }
+    std::string status() const override;
+    bool claims_wheel_push() const override { return true; }
+    bool finished() const override { return shell.leaving() || power_off_failed.load(); }
+
+private:
+    uint32_t now_ms() const;
+    void card_access(Hardware& hardware); // service thread: SD card access (parity phase 10b)
+    Clock::time_point started = Clock::now();
+    melodee::EngineHost host;
+    UsbStems stem_block {}; // audio thread: each track's mono stem for USB-C
+    AudioBlock usb_block {}; // audio thread: fixed main mix for browser capture and full-level USB-C
+    bool usb_full = false;   // audio thread: Settings selects fixed-level USB-C output
+    melodee::Shell shell;
+    melodee::SampleLibrary library; // service thread: files on the card
+    melodee::ProjectStore store;    // service thread: projects on the card
+    melodee::InputRoute input_route;
+    unsigned voice_rate = 48000; // audio thread // service thread: Input Config's source on the hardware, USB-C in, the speaker
+    melodee::PluginRack plugins;     // its own thread: the plug-ins the project uses (freed before the engine host)
+    melodee::PrintEngine printer;    // its own thread: prints (freeze plan F2a), stopped before the rack and library go
+    // About (round 2): how the machine is doing, read on the service thread (each core every half second, the
+    // card every five) and copied into the snapshot by the screen thread.
+    struct MachineReadings {
+        std::array<std::atomic<uint8_t>, 8> core_load {};
+        std::atomic<uint8_t> cores {0}, plugins {0};
+        std::atomic<float> plugins_load {0};
+        std::atomic<bool> card {false};
+        std::atomic<uint64_t> card_free {0}, card_total {0};
+    } machine;
+    std::vector<CpuTimes> cpu_before; // service thread: the last reading of each core
+    uint32_t machine_at = 0, card_at = 0; // service thread: when they were read
+    void read_machine(Hardware& hardware); // service thread
+    // Roadmap P2: whether the render threads keep to cores 1-3 and the rest to core 0 unless $MELODEE_RENDER_THREADS
+    // says otherwise (measured on the MPC, docs/ROADMAP.md); and the service thread's sweep that keeps the rest there.
+    static constexpr bool render_pinned_default = false;
+    void keep_rest_off();
+    uint32_t pinned_at = 0; // service thread: the last sweep
+    // Roadmap P2: at each dropout the busiest track then (0 none, else 1-16) and its share of a block, for status.
+    unsigned xruns_seen = 0; // service thread
+    std::atomic<unsigned> dropout_track {0}, dropout_load {0}; // tenths of a percent
+    void note_dropout();     // service thread
+    std::unique_ptr<melodee::Snapshot> frame; // screen thread
+    void draw_frame(juce::Graphics& g); // screen thread, shared by panel and web capture
+    juce::Image web_image; // allocated only on the first live-screen request
+    melodee::ui::BootAnimation boot;          // screen thread: the logo, then the app
+    bool startup_light_show = true; // captured from settings before the runtime threads start
+    std::atomic<uint64_t> boot_light_timing {0}; // screen publishes; MIDI reads without touching BootAnimation
+    std::atomic<bool> boot_skip {false};      // a button or pad pressed: the boot animation fades out now
+    uint64_t power_presses = 0;               // service thread
+    // `melodee-press [shift+]BUTTON|wheel+N|wheel-N|padN`: the service thread
+    // queues, the MIDI thread acts it out as if by hand.
+    struct Remote { uint8_t kind = 0, index = 0; int8_t delta = 0; }; // kind 0 button (index | 0x80 Shift), 1 wheel, 2 pad (delta: held button + 1), 3 pot (index | 0x80 Shift, delta: 0..127), 4 hold (delta 1) or release a button, 5 the same for a pad
+    MidiQueue<16, Remote> presses;
+    // `melodee-midi [usb] HEX...`: one message as if it came in on the External (or USB) port, for checks without a cable.
+    struct RemoteMidi { bool usb = false; MidiPacket packet; };
+    MidiQueue<16, RemoteMidi> remote_midi;
+    MidiQueue<16, melodee::LooperAsk> remote_looper; // `melodee-looper`, parsed on arrival, done on the MIDI thread
+    // `melodee-print TRACK [PATTERNS|all] [pre|post] [loop|ring|cut]`, `status`, `cancel`; `melodee-freeze` with the
+    // same words (freeze plan F2b; alone or `status`: what is frozen now) and `melodee-unfreeze TRACK`: parsed on
+    // arrival, asked on the MIDI thread.
+    MidiQueue<4, melodee::Context::PrintAsk> remote_print;
+    std::atomic<bool> panic_asked {false}; // `melodee-midi panic`
+    bool power_known = false;
+    bool power_off_asked = false;             // service thread: systemd asked to turn the MPC off
+    std::atomic<bool> power_off_failed {false}; // it could not be asked (or this is not the MPC): leave for the stock app
+    melodee::CardNote card_note = melodee::CardNote::None; // service thread: why the last lend did not start
+    uint64_t card_returns = 0;
+    // The card's folders read ahead of the kernel's driver (shell/card_warm.h): once when the card is found and again
+    // when it comes back from being lent. Projects, samples and so the plug-ins wait for it, a few seconds at most.
+    melodee::CardWarm card_warm;
+    std::string card_warmed;  // service thread: the card it was last begun for ("" none)
+    uint32_t card_warm_at = 0, card_looked_at = 0; // when it was begun, and when the mounts were last read (ms)
+    static constexpr uint32_t card_warm_patience_ms = 5000;
+    unsigned card_loads_seen = 0; // service thread: the project loads asked for when it was last begun
+    bool warm_card(Hardware& hardware); // service thread: begins it when due; true while the card's readers should wait
+    // Updates from the card (shell/update.h, base drivers/sd_update.h): service thread only.
+    void card_update(Hardware& hardware);
+    bool update_ready();                       // sd-update.sh is next to the binary and the key file is written
+    sd_update::Setup update_setup;
+    bool update_setup_tried = false;
+    bool update_installing = false;            // an install started by this app is running
+    bool update_settled = false;               // the status of an earlier install has been read
+    bool update_rescan = false;                // `melodee-update`: check again now
+    std::string update_card, update_zip, update_version; // folder checked, zip offered, its version
+    std::string update_override;               // `melodee-update DIR`: folder to check instead of the card
+    uint64_t update_returns = ~0ull;           // CardShareStatus::returns at the last check
+    std::vector<std::string> update_skip;      // zips skipped (LATER or failed) until the card is returned
+    uint32_t update_looked_at = 0, update_polled = 0, update_started = 0; // ms
+    std::atomic<bool> update_offered {false};  // for status
+    std::array<std::array<float, melodee::prism_spectrum_bins>, melodee::MixSpectrum::sources> mix_spectra {};
+    uint32_t mix_spectrum_at = 0;
+    int mix_spectrum_owner = -1;
+    int prism_overlap_view = -1;
+    melodee::PrismOverlapHold prism_overlap_hold;
+    void update_mix_spectrum(uint32_t now);
+    std::string update_note;                   // notice held until the boot animation has ended
+    uint64_t update_scans = 0;                 // card checks done, for the web page
+    std::string update_declined;               // the zip LATER was pressed on, no longer shown as asked on the web page
+    unsigned screen_applied = 0; // the brightness % last set; 0: never touched (the runtime restores it on leaving)
+    // The web page (web/web_app.h), on its own thread; the service thread tells it about the card and updates.
+    void web_service(Hardware& hardware);
+    std::string web_card;                      // service thread: the card's top folder while home
+    uint32_t web_card_at = 0, web_tried_at = 0; // ms: the card last looked up, the port last tried
+    bool web_running = false;
+    melodee::web::WebApp web;                  // last: its thread stops first
+};

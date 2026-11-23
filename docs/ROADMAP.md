@@ -1,0 +1,872 @@
+# Melodee roadmap (2026-11-12)
+
+What Melodee still lacks, in six phases, built one phase a session in order
+P0 → P5 (Kerem, 2026-11-12: "start all of them one by one in separate
+sessions, fully automate the flow and do not stop until every phase is
+done"). Each session reads this file, [AGENTS.md](../AGENTS.md),
+[MELODEE.md](MELODEE.md) and the "Rules for every phase" in
+[MELODEE_PARITY.md](MELODEE_PARITY.md) first, builds its phase, ticks its
+boxes, adds a line to the log at the bottom and updates MELODEE.md where
+behaviour changed.
+
+## Rules for every phase
+
+- Work in this checkout on `main`, no
+  worktree. Build with `./build.sh` here, reusing `build/`; never in a
+  private scratch copy. Other sessions edit this checkout at the same time:
+  commit only your own paths (`git commit <paths> -m ...`), never `git
+  checkout` / `restore` / `stash` a file you did not change, compile your
+  own objects (`make build/obj/melodee/<path>.o`) before leaving a file, and
+  fix your file first when it breaks a peer's build. GCC 12 `-Werror` trips
+  on aggregate inits with missing fields and on `std::vector` assign from an
+  init list.
+- Device: `python3 device.py start --app melodee` deploys the built
+  `build/melodee` (never return to stock, never the ctl prompt overlay);
+  `--ctl melodee-press` and the `status` fields check it remotely. What
+  needs ears or hands goes under "Waiting for a hand check" below instead
+  of stopping.
+- Audio thread: no allocation, locks or waits; new audio state arrives as
+  `Command`s. Project file: new fields are new tagged sections, so older
+  `.mldp` files still load. No literal 44100: rates and latency come from
+  `EngineHost::set_audio_format` / `drivers/audio.h`.
+- Base changes go into the sibling checkout `../sample-base` (committed
+  there, then `base/` moved to that commit). Never push anything, here or
+  there, and never touch GitHub: list the pushes owed in the log.
+- Screens: pads pick, knobs set, keys act, Push has one job, no push and
+  turn; 11 px text floor; glyphs over sentences, no text walls; tokens from
+  `ui/`. Every new page gets a `--melodee-preview` name; the Shift overlay
+  follows any Shift job that changes.
+- No questions to Kerem: where a choice is open, take the one that fits
+  these rules and Melodee's grammar best, write it under "Decisions made by
+  sessions" with a line of why, and go on. Kerem may revisit them.
+- Commits: Conventional Commits, subject line only, no attribution. Commit
+  each finished item once `./build.sh` passes; no need to ask.
+- Leave alone what other work owns: round 2 phase 3 (four sends a track,
+  pattern chains, step entry) belongs to the UI redesign; track freezing to
+  its own planning session; pad lights to their proposal.
+
+## Decisions made by sessions
+
+- P0: a note played by hand or by MIDI in plays exactly one block (128
+  frames) after the frame it came in at, at that frame; commands sent
+  after it wait behind it, so nothing overtakes it. Inside a block only
+  notes and values (`EngineHost::mid_block`) are applied; anything else
+  (Play, a project, an engine, a plug-in) waits for the next block's start,
+  where it always was, so block-wide state stays whole. Why: keeps the
+  order sent and the render workers' rules, at the cost of half a block
+  more latency on average for no jitter.
+- P0: a timed note more than three blocks ahead (the audio clock off just
+  after an overrun) plays at once, as before. Why: a hit can never be
+  that far ahead; better a block late than tens of ms.
+- P0: Seq Record places an unquantised note on the tick nearest to where
+  it was heard (it took the tick the playhead had last played). Why: half
+  a tick nearer the played time.
+- P0: pad presses through `--ctl melodee-press` and `melodee-midi` notes
+  are stamped as a hand's, so the timed path can be checked remotely
+  (status `melodee_timed`).
+- P0: the VST2 bridge's lock inherits priority (rather than a lock-free
+  copy of parameter values, which would go stale when a plug-in changes
+  its own); the worker takes `SCHED_FIFO` 30 only once the plug-in is open
+  (an open at that priority could hold a core from the audio threads),
+  with `SCHED_RESET_ON_FORK` so threads the plug-in starts stay normal; a
+  state is read or written one parameter a lock, blocks passing between.
+- P1: ratchets, their ramp and (next) trig conditions sit on a second row of
+  cards, the TRIG row, reached by pressing the lit editor key again (STEPS
+  on Steps, ROLL on Roll), Stage's cycle grammar with its dots: K1 hits, K2
+  velocity ramp, Shift + K2 a kit pad's pitch ramp. Why: knobs set values;
+  round 2 (agreed with its session) turns Step Edit into step entry and
+  puts NUDGE on Roll's Shift + K1, so neither Step Edit nor a Shift row
+  carries them.
+- P1: a ratchet's hits spread evenly over the note's length (no swing
+  inside), each held as a one-hit note of that length is, each on its own
+  frame (the render loop splits the block there, as for ticks); the chance
+  is rolled once for all, an accent lifts each; the ramp goes evenly from
+  the note's velocity to the last hit's (iOS's rule). Slide and Tie wait for
+  a note of one hit. Why: the hand-off of a held note into the next note
+  only works from a single note; ratchets are drums' job.
+- P1: the pitch ramp is a kit pad's only (the sampler; not the 909, whose
+  drums have no tune per hit), as the roadmap had it.
+- P1: on a kit, Steps' cards (length, velocity, chance and the TRIG row) are
+  the last pad's note in the step, not the step's first note. Why: Steps on
+  a kit shows and toggles that pad's lane, so its cards follow it.
+- P1: Fill is Play held while playing (Play there did nothing), for as long
+  as it is down. Why: a held control on a printed key that had no job
+  while playing; Seq held and Shift already carry layers.
+- P1: PRE follows the last weighed note of its lane (a kit's pad, else the
+  track); NEI the lane before (a kit's pad below, the first pad the track
+  before; a synth the track before); a lane with nothing weighed since Play
+  counts as played (iOS's rule). A note is weighed with a condition of its
+  own or a chance below 100; the condition goes first, then the chance.
+  Why: a kit's pads are its voices, as Elektron's tracks are.
+- P1: trig conditions sit on the TRIG row's K3, beside the main row's K3
+  chance.
+- P1: Motion lives in each pattern (`Pattern::motion`, MOTK), sorted by
+  tick, 8192 points a pattern, found by binary search each tick; edits reach
+  the audio thread as the pattern's copy (`PatternData`), recorded moves at
+  most every 40 ms (`Context::flush_motion` on the MIDI loop). Why: no
+  per-event commands to keep two lists equal, and copies, doubles and track
+  copies carry their motion for nothing. New files keep Motion only in
+  MOTK, so builds from before P1 lose it (older files still load).
+- P1: a lock is a Motion point with a hold: the lane holds its value from
+  the step for as long as the step's longest note on its lane (a step at
+  least; on Roll the note's length), then goes back to its recorded value
+  there, else the track's own. Why: the sound changes for that step's notes
+  only, as an Elektron lock does, without rewriting what Motion records.
+- P1: holding a step on Steps now turns the cards to locks (the Motion
+  page's three lanes); the step's own length, velocity and chance are the
+  cursor step's cards when no pad is held (a tap that creates a step, or
+  the wheel). On Roll a pad held on the note in focus does the same. Step
+  Edit gets none: round 2 makes it step entry.
+- P1: a kit lane's own length is set on Steps (the lane view) with Shift +
+  K1, in steps of Q, the pattern's length meaning none; it loops from
+  where the pattern began (not from the bar), so a 3-step hat drifts
+  against a 16-step kick and meets it again after 48. Its notes past its
+  length stay but are not heard. The 909 and synths have no lanes (Steps
+  there edits whole steps). Why: Shift + K is the card's second parameter,
+  and the lane's length is its length card's.
+- P1: Note Repeat's 1/4 and 1/64 are the lit B1 and B3 pressed again
+  (Stage's "lit key again steps on", dots under them), Shift their
+  triplets. The arp's clock went from 24 to 96 ticks a quarter to hold
+  1/64T. Pressure sets velocity once the pad reports some (before that the
+  strike's), off under Full Level. Under Seq Record the arp's notes are
+  written by the audio thread's count (`arp_origin` + its ticks, so on the
+  grid even with swing) and the press is not written. Why: what is heard
+  is what is kept; a press with Note Repeat on makes no sound of its own.
+- P1 (with round 2's session, its Time Correct C pick "strength, heard
+  live"): humanize and the groove are a pattern's `Feel`, with strength and
+  swing, applied to the copy the audio thread plays (`feel_pattern` in
+  `Context::sync_pattern`, the packs and `EngineHost::load`), never to the
+  notes; humanize is a fixed offset a note (seeded by its tick and key), so
+  a pass sounds like the last until the amount changes; a groove is a copy
+  taken from the pattern picked, by sixteenths, 64 at most. P1 built the
+  model, file (FEEL), cards (`feel_cards`) and their kinds; round 2 lays
+  them out on Time Correct's page. Why: one timing path for both, and
+  turning an amount back takes it back.
+- P1: Euclid lives on Steps' card cycle (STEPS again: TRIG, again on a kit:
+  EUCLID), laid as notes at once on each turn, the lane's own length set
+  to its steps so E(5,12) loops as 12 against the pattern (polymeter, as
+  item 4 made possible), its notes editable after. Variations are Steps'
+  Push sheet (Push was free there), each into the next empty pattern which
+  then plays, as round 2's Capture C does, the original kept. Why: keys
+  act and knobs set; a variation is a new take to compare, not an edit.
+- P1: a track's speed is Tracks' Shift + K1 (the strip in hand; K1 picks
+  the track), applied like the feel to the copy the audio thread plays
+  (`played_pattern`: ticks times den / num, to the nearest tick, so ×3/2
+  and ×3/4 round triplets and odd ticks by half a tick at most), its
+  positions published back in written ticks for the pages and Seq Record
+  (`place_at`, the arp's notes, Rec Quantize's skips scaled). Speed is not
+  part of undo, as the tempo is not. Why: one place for "how it plays";
+  the pattern and its file keep what was written.
+- P2: one dispatch a block: the audio thread sequences the whole block
+  first; a call it makes to a track's engine past the block's first frame
+  is kept as an `EngineCall` with its frame (notes, slides, values, the
+  wheel, pressure, mod routes, kit pads, Motion's pad and effect values),
+  384 a track a block, and the track's job makes each at its frame between
+  render calls (`play_calls`). Calls at the first frame go straight in. A
+  full list goes in whole at the block's start, in order (counted). The
+  old way stays behind `set_one_dispatch(false)` for tests and comparing.
+  Why: one barrier, no per-tick wake-ups, and a plug-in track renders a
+  block in one bridge round trip.
+- P2: Prophet, SID, FM6 and CZ step their modulation on their own count
+  of frames (`engine.h` ControlStep: 16, 16, 128, 128), restarted by any
+  call that changes them, their LFOs moved on by the frames played since
+  the last step; a voice is let go at a step's end. Why: an engine then
+  sounds the same however the host cuts its block, so the test compares
+  both ways sample for sample (exact, not within a tolerance), and a
+  synth's modulation no longer jitters with other tracks' ticks. FM6 and
+  CZ at 128 cost what their once-a-block step cost.
+- P2: the workers never spin between blocks: woken as a block starts
+  (`RenderPool::wake`), they wait awake at most 200 µs, only while the
+  block is sequenced and between its two runs, then sleep. Why: measured
+  on the MPC, sleeping between blocks saves ~20 % of a core; waking them
+  at the block's start hides their wake-up (~70 µs) under the sequencing.
+  100 µs against 200 µs made no difference.
+- P2: the Looper is one job of the tracks' run (its loops, strips and
+  chains), not four jobs after the tracks: its loops play what came in the
+  block before, never this block's tracks, and `Looper::run` makes the four
+  together. Buses A–D and Knob FX are the second run, each a job; the
+  master's chain stays on the audio thread. Plug-ins are checked for two
+  places at once among the tracks and loops, and among the buses.
+- P2: floating stays the default (audio and three workers over four cores);
+  `MELODEE_RENDER_THREADS=pinned` puts the audio thread on core 1, two
+  workers on cores 2 and 3 and every other thread of Melodee's on core 0
+  (the service thread sweeps them every 2 s). Measured: the dsp bench's
+  mean block 1403–1592 µs floating against 1773–1836 µs pinned (pinned
+  overran its budget 33 times in 15 s once); the app with the MPC's
+  project, render load peak 24–26 % floating against 28.5 % pinned, the
+  same total CPU. The VST2 bridge is its own process and is not pinned.
+- P2: a track's load is its job's time (engine and chain) against a
+  block's period, held at its peak and falling as `render_load` does:
+  along each Tracks cell's bottom (the whole width a core's whole block,
+  green, amber from 60 %, red from 85 %) and as the header's pill for the
+  track in hand; Settings' AUDIO shows the blocks' share under its rows
+  with the dropouts beside it. A dropout (the runtime's xrun count rising)
+  makes the service thread note the busiest track then
+  (`melodee_dropout_track` / `_load`). Why: what the screen has, no new
+  timing on the audio thread.
+- P2: the overload guard engages at 85 % of a block's time and lets go
+  under 70 %: from 85 % each block the busiest track's oldest held voice is
+  let go, and every engine's released voices end their tails in about
+  30 ms (`Envelope::hurry`; a kit's pads are choked); between 70 and 85 %,
+  once engaged, the tails only. Effects' tails (reverbs, echoes) are left
+  alone. The 909 and plug-ins have no voices to give. It is off in
+  `EngineHost` unless asked (a test's output must not hang on its
+  computer's speed); Melodee and the bench turn it on.
+- P2: samples keep their 44.1 kHz frames (everything that reads a sample
+  but the voices still does) and gain a copy at the device's rate, made
+  once on the service thread as they are read: from the file itself, its
+  own frames when its rate is the device's, else one conversion with the
+  base's windowed sinc (`dsp/frame_ring.h`, 90 dB, already used for
+  USB-C: neither JUCE's interpolators nor inMusic's packages were needed).
+  The 44.1 kHz conversion at load is that sinc too (it was linear). Copies
+  share a 256 MB budget; past it, and for instruments streamed from the
+  card (their caches are 44.1 kHz), voices convert as before. A rate
+  change remakes each copy from its file, a slot a pass. Kerem asked on
+  the way (2026-11-12): nothing may force 44.1 kHz on what plays; it
+  doesn't, playback follows Settings' rate; takes and renders are still
+  saved at 44.1 kHz (follow-up below).
+- P2 reversed (2026-11-16, Kerem: "we shouldn't keep copies"): a sample is
+  held once, at its own rate, with no copy at the device's rate and no
+  44.1 kHz conversion, in memory or on the card. The device-rate copy, its
+  256 MB budget and the remake at a rate change are gone; voices read a
+  sample's own frames at its rate over the device's, by a straight line
+  between frames, as instruments' zones did. Hits are found in a 44.1 kHz
+  mono sum made for the analysis only; the stems program gets a 44.1 kHz
+  conversion for its job only. Instruments' `Melodee/Cache` files are laid
+  out at the source's own rate (cache version 3). The by-ear check at
+  48 kHz of a 44.1 kHz sample (linear reading where the copy was
+  band-limited) is owed; a 4-point read in the voice is the fix if it is
+  heard, not a copy.
+- P2 follow-up (2026-11-12): nothing Melodee records is converted to
+  44.1 kHz any more. Takes, Audio Recall, Resample and the song's mixdown
+  are captured at the device's rate (`TakeRecorder`, `RecallRing`,
+  `Bounce`; `engine/model_rate.h` is gone), written at it (`write_wav`,
+  `WavStream` take a rate) and kept as read_wav keeps a file
+  (`keep_capture`: its own frames play, its 44.1 kHz frames made once with
+  the sinc). Positions, not audio, are converted: a take's `frames()` and
+  `length()`, a render's `frames()`, Recall's status and every region and
+  cut stay in 44.1 kHz frames. Save Sample, Trim and Extract cut a
+  sample's own frames when they are what plays (`plays_own`), so a 48 kHz
+  take trimmed stays 48 kHz; else 44.1 kHz as before. Captures are
+  quantised to the 24-bit step they are written at (`as_written`; write
+  and read now both scale by 2^23), so a rate change reads the same frames
+  back from the file. Buffers are sized for 96 kHz (take 46 MB, Recall
+  20 MB, render ring 8 MB: 40 MB more than before) rather than remade on
+  the audio thread at a rate change; a take or render running when the
+  rate changes ends there. Plug-ins (reloaded at the new rate) and Monitor
+  (the source straight into the mix) already ran at the device's rate; the
+  metronome's blip and the Record meter fell a fixed step a frame or a
+  block (twice as fast at 96 kHz) and now take the same time at any rate,
+  unchanged at 44.1 kHz. Effects with such steps (Knob FX Vinyl and Tape,
+  Pad FX Vinyl) are proposed as a session of their own.
+  Loops followed, Kerem's choice ("size by rate"): each loop keeps its
+  frames at their own rate (a take's the device's, written and read a
+  frame a frame; an older project's 44.1 kHz file read at 44100 / rate),
+  its memory made 64 s at the device's rate (180 MB in all at 44.1 kHz,
+  197 at 48, 393 at 96), an empty loop's made again when the rate changes
+  while one with audio keeps its own; files saved at the loop's rate, the
+  project's frame counts still 44.1 kHz frames.
+- Effects at the device's rate: every constant an effect took a 44.1 kHz
+  frame at a time (a fall, a one-pole's step, a count of frames, a chance a
+  frame, a length in frames) is made the device's where the rate is known
+  (an update, a punch's start, a block; `dsp.h` `fall_per_frame`,
+  `step_per_frame`, `every_model_frames`, `kept`, `noise_level`,
+  `click_level`, `fall_per_block`), never a frame at a time. Knob FX: Vinyl
+  (crackle chance, fall and level, hiss band and level, rumble cut), Tape
+  emulator (a new aim every 4096 44.1 kHz frames, drift, hiss), Pumper,
+  Tremolo, Gate, Transient, Tube drive's DC blocker, Crush's and Spit's
+  holds, Spit's chance and length, Spring's dispersion (its allpasses'
+  corner kept, bilinear), the reverbs' damping, Shimmer's window. Pad FX:
+  Alias, LoFi, Color (Cassette's and Flutter's wobble, hiss, Tube Amp, Vinyl),
+  Trance Gate, Reverb's damping and spread, Upper's window, Flange, Rev
+  Stepper's edges, Vinyl's clicks. Also the master's Color, a sampler
+  choke's fade and a zone's duck, the looper's play, stretch and punch
+  ramps and seam fades, and the mix, loop and DSP load meters' fall.
+  White noise is scaled by the square root of the rates' ratio and a
+  one-sample click by the ratio, so each is as loud in the audible band.
+  At 44.1 kHz each constant is itself: every Knob FX kind (three settings
+  each), every punch and the master's Color rendered bit for bit as before,
+  with and without FMA contraction (the noise scaled where it comes in, not
+  after a product). Left: control steps (filters retuned every 8 or 16
+  frames) only come more often; Prophet, CZ, SID, FM6 and the 909 leave
+  Melodee. Why: Kerem, "I don't wanna force 44.1khz for anything".
+- P3: pad layers are the pad's own sample and region (layer 1) plus three
+  `PadLayer`s, each a sample, region, velocity range and tune, level and pan
+  over the pad's; every other value (envelope, filter, play, loop, warp,
+  Pad FX) is the pad's over all of them, a layer looping from its own start.
+  Velocity plays every layer its velocity reaches (two ranges that overlap
+  both play: the MPC's), Cycle the next layer that holds a sample, Random
+  one. A pad playing an instrument keeps its zones and ignores layers; a
+  layer takes only a plain sample (LOAD refuses an instrument). Why: the
+  MPC's own layer grammar, and one slot a layer keeps them in the project's
+  sample table, chop, trim and save paths as any pad's sample.
+- P3: LAYERS sits after TRIM in B1 on Stage and on the sampler pages (the
+  samples a pad plays belong with its region): Stage's kit B1 is now five
+  pages (TRIM, LAYERS, MIX, AMP ENV, SENDS), the one cycle allowed past
+  four. K1 the layer in hand, K2 / K3 its velocities (unbound under Cycle
+  and Random, where they do nothing), Shift + K1 Velocity / Cycle / Random,
+  Shift + K2 / K3 the layer's tune and level (layer 1's are TUNE's and
+  MIX's); Shift + B1 LOAD opens Samples and its Push loads onto the layer in
+  hand and comes back (one undo), Shift + B2 CLEAR. Why: knobs set, keys
+  act; no row 2, which Stage's kit pages do not have.
+- P3: an MPC drum pad of two to four layers (`.xpm`, `.xty`, `.xpj`) is
+  turned onto pad layers after the import, only where the project's free
+  slots hold all its layers' files (its streamed instrument's slot given
+  back); a pad of more layers, a note-off pad, or one that no longer fits
+  stays the streamed `<file>#<pad>` instrument as before. Why: a pad that
+  loads today never fails to load (the slots are the whole project's), and
+  where it fits it becomes editable on LAYERS.
+- P3: Chop keeps one chop a sample, of the region last chopped
+  (`Project::chops`, CHOP), copied in when Chop moves to another region and
+  at every save, given back when Chop opens that region again; a slot taken
+  by another file drops its chop. Why: the MPC keeps slices with the sample;
+  a chop of every region would grow without bound and is not what Chop shows.
+- P3: a save frees a slot when no pad's layer plays it, no undo or redo
+  step could bring a pad back onto it, no file being made holds it and Chop
+  is not on it; the library lets its audio go. Nothing is deleted from the
+  card. Why: undo after a save must still play what it restores.
+- P3: Pad Link follows each linked pad's own link through the bank, each
+  pad once; a muted pad is silent but links on; a looping one shot hit again
+  stops only itself, as before.
+- P3: a note Seq Record writes from 16 Levels Filter keeps its cutoff
+  (`Event::cutoff`, LVCF) and plays at it; the cutoff rides to the sampler
+  in the note's bits 16-23 (`pad_note(key, semitones, cutoff)`), note offs
+  unchanged, so no new call on the audio thread. A slide into such a note
+  plays it at the pad's own cutoff.
+- P3: a loop's seam crossfade is a pad's own time, 0-250 ms (PLAY's Shift +
+  K3, XFADE, either row; PXFD), off by default so every loop already made
+  sounds as it did. Linear (constant gain, as the seam's two sides are
+  alike), into what lies before the loop point; with nothing there, just
+  after the turn out of what follows the end; with neither, a dip to nothing
+  and back. Why: time, not frames, so 48 and 96 kHz fade as long as 44.1.
+- P3: Resample on the Song page renders the song (Shift + Pad 11, then a
+  pad), as the mixdown plays it, into a slot; past 60 s its first 60 s land
+  and the song is stopped there. Why: the printed Resample keeps its job,
+  the page in view says whose.
+- P3: SFZ release samples play at the press's velocity, `rt_decay` dB down
+  a second held, never on the press; EXS release groups and MPC note-off
+  keygroups became release samples too. Crossfades use the format's power
+  curve as a square root. A keyswitch press sounds nothing and cuts nothing;
+  a range not named is the keys the zones switch on, the default sw_default
+  else its lowest; the keyswitch is the instrument's (every pad playing it
+  shares it). `sw_down`, `sw_up`, `sw_previous` are named and not followed.
+- P3: SF2 is read by Melodee's own reader (`engine/sf2.cpp`): JUCE has no
+  SoundFont support and inMusic's open-source packages hold libsndfile, FLAC
+  and mpg123 but no SoundFont or DecentSampler reader. The browser opens an
+  `.sf2` as a folder of its presets; the file is mapped, never read whole,
+  and only the preset loaded has its sounds laid out in `Melodee/Cache`, then
+  streamed and mlock-pinned as an SFZ's. `.dspreset` XML is read with JUCE's
+  XmlDocument into a plain tree, then as an SFZ.
+- P3: status gains `melodee_pad_layers`, `melodee_layer_play`,
+  `melodee_pad_xfade`, `melodee_voices` and `melodee_voice_slots` for remote
+  checks.
+
+- P4: delay compensation is planned at every block's start from what each
+  path reports (a plug-in's latency, VST2's `initialDelay` through the
+  bridge's Info too, scaled to the device's rate; its rate converter's,
+  measured once with an impulse as it opens: at 48 kHz an effect's 148
+  frames, an instrument's none, as the converter runs it ahead; a Limiter's
+  LOOKAHEAD, 0-10 ms, its line from the pool only while above 0; bypassed
+  slots count none). Every track and loop track meets the latest of them,
+  the direct mix waits for the latest bus or Knob FX return, the master's
+  chain delays all alike; the lines (30, 16384 frames each, made at start)
+  ease across one block when a latency changes and start from silence after
+  a block unused. MIDI out, the click and Seq Record's placing move by the
+  whole; a MIDI track's own DELAY adds to it. Why: what is heard together is
+  what was played together, and outside gear lines up with it.
+- P4: a keyed Compressor or Gate keeps its key in its slot (`EffectSlot::key`,
+  FXKY; the struct gained a constructor so older brace inits still build),
+  set on the effect's last row of cards (KEY, after its parameters on −/+),
+  not a seventh parameter (a slot has six, Motion's numbering counts on it).
+  A track keyed by a track runs its chain after the others in the same block
+  (the key on time); a key that waits itself, a bus keying a track or bus,
+  and a loop track's key are a block late. The key is the source as it
+  leaves its chain at its level, muted or not, as the master's Sidechain.
+  Track moves remap keys (shell/track_swap.h).
+- P4: SYNC went on Echo and Ping pong (their fifth card) and Tape echo and
+  Diff delay (their sixth): 1/32 to 1/1 with triplets and dotted; the delay
+  follows the clock each block and glides there over 50 ms (a tape's bend,
+  not a click). A Diff delay on the clock takes its diffusers' delay off, so
+  its echo lands on the note. TIME's card shows the note value meanwhile.
+- P4: the mix's Motion lanes are numbers after the pad lanes (160 on: level,
+  pan, sends A-D, the master chain's 36 values, the four returns), points of
+  the selected track's pattern like any lane; the master's values recorded
+  there move the master for the whole mix while that pattern plays, and go
+  back to where they were set at its start and on Stop. Why: Motion lives in
+  patterns (P1), and the master has none of its own.
+- P4: modulators and macros are the project's (MODS, MACR), eight each, on a
+  MOD page reached by Motion's lit MOTION again (Stage's "lit key again"),
+  B1 MOD, B2 MACRO, B3 ADD the lane a pot turned last anywhere. A modulator
+  swings a lane around where it stands (as set, or where Motion has it: the
+  audio thread notes every set and every Motion move of a modulated lane)
+  each block, an LFO by ±half its depth of the lane's range, a follower by
+  its depth one way; four targets each. A macro is the shell's: its turn sets
+  each target as its own pot would (from low to high), eight each; its turn
+  is not an undo step, its settings and a modulator's are (with the
+  master's). A modulator reaches the audio thread as small packed commands
+  (a Modulator inside Command made the queue's commands too big for test
+  stacks).
+- P4, MIDI tracks: see docs/MIDI_TRACKS.md "As built in P4" and its open
+  questions decided there (no panic button taken, no slot templates, bounce
+  in real time, patterns keep notes). Slot definitions are parameters (an
+  address a slot: CC, 14-bit CC, bend, pressure, NRPN 0-1023) on each SLOTS
+  page's second row; no per-slot range or names; DELAY, a pattern's own
+  program, the input as sound and SysEx from the card's SysEx folder.
+- P4: exports are on Song's Export, the wheel picking what B2 makes:
+  mixdown as 32-bit float (as before), 24-bit or 16-bit integer PCM with
+  TPDF dither (a step's worth, the only place Melodee dithers: the float
+  mixdown, stems, takes and renders need none), STEMS (a folder with the mix
+  and each track and fed bus, float, in the same real-time pass: the engine
+  host fills a 21 MB ring made when first wanted), or a MIDI FILE (format 1,
+  96 ticks a quarter, the song's lanes or the patterns playing). A `.mid` in
+  the browser lays all its notes on the selected track's pattern playing.
+- P4 (asked by the VST-migration session, Kerem's dropouts on project loads):
+  a project load no longer clears delay memory or works effects out
+  on the audio thread at once: the pool hands out never-written blocks
+  first and an effect clears a written one 16384 floats a block (its wet
+  silent meanwhile), and each effect's six values are set and worked out
+  once (73472a5, 8cb3399). That session measured P7 / P8 loads at 0
+  dropouts in 6 after the first; the second saved little (7A still dropped
+  out 7 loads in 16): the rest is the Reload clearing ten Punches' lines,
+  which that session fixes in punch.*.
+
+- P5: a scene is a column, pattern n of every track, as melodee-ios's
+  Stage scenes are, with a name and a tempo of its own (SCNE); SCENES is
+  Patterns' Push (Push had no job there), and Seq held + Shift + pad,
+  which launched the column, now launches its scene. A track with nothing
+  in the column plays on (the column launch's way) rather than stopping
+  (iOS's). Why: Melodee's grammar had it, and a follow action's Stop
+  silences a track when wanted. A scene's tempo becomes the project's on
+  the bar its patterns launch (stopped, at once); BPM per pattern, when
+  on, still leads. Scene names and tempos are not undo steps, as the tempo
+  is not; names come from the Name sheet with the markers' ready names.
+- P5: a follow action belongs to a pattern (FOLW), as on iOS. The audio
+  thread plans it as its pattern starts (the dice roll then: which action,
+  after how many stretches) and brings it on its tick, to the frame, not
+  on a bar line, so a pattern of 1.5 bars followed after a play changes
+  there; a launch waiting for its bar comes first; none come in the song.
+  Next and Previous go round the track's patterns with notes, Any is
+  another of them at random, Again is the same from its top, Stop leaves
+  the track silent until a launch or Play. K3 CHANCE is the first
+  action's odds, Shift + K1 OR the second's (the rest); with no second, a
+  roll that misses plays the pattern on another stretch (iOS's rule).
+- P5, a chain meeting a follow action: a chained track (round 2's
+  seq-sheet2 B) plays its chain, and its patterns' follow actions wait
+  while it is chained; launching by hand (a scene too) ends the chain as
+  before, and from there they come. The shell tells the audio thread
+  which tracks are chained (Command Chained, from follow_tick); the
+  chain's code is untouched. Why: a chain is an order asked for in the
+  hold; a follow action breaking into it would make it unpredictable.
+- P5: capture's ring is the MIDI thread's (shell/capture_ring.h, 8192
+  notes, made with Context), so the audio thread has nothing new to do or
+  allocate. A note played while the transport runs keeps the tick it was
+  heard on (P0's heard place), one played stopped its time. Recall (Shift
+  + Seq Record) lays every track that played in the phrase, each into its
+  next empty pattern, over the same bars so they line up, one undo for
+  all (Edit::patterns_before / after); ff6d82a's selected-track Recall is
+  the one-track case. Settings' Capture bars gained Auto (the phrase: back
+  to where no track played for two bars, up to 64; the new default), 16
+  and 32; older settings files keep their number. With Note Repeat on the
+  presses are kept, not the repeats (those reach the shell only under Seq
+  Record; keeping them always would take a second queue from the audio
+  thread). Played stopped, the bars asked count back from where the last
+  note ended, as the transport's count back from the bar after it (the
+  MPC showed counting back from the press lost a phrase played a few
+  seconds before it; fixed in 2bc7756).
+- P5: the tempo lane is the song's (Song::tempo, TMPL): points on bars, 64
+  at most, each a Step on its bar or a Ramp into it from the point before
+  (the first from bar 1 at the project's tempo), at a tenth of a BPM. The
+  audio thread works it out each tick while the song plays (follow_lane),
+  before that tick's length is counted, so the tempo, the effects' clock,
+  the arps' and MIDI clock's follow without a command; MIDI clock in still
+  leads, BPM per pattern waits while a song with a lane plays, MTC in
+  places the song through it. It is set on Song's Shift + K1 / K2 (that
+  Shift row was empty): BAR TEMPO at the cursor's bar, Off below 30 BPM
+  takes the point away, SHAPE Step or Ramp; with points it is a strip over
+  the tracks (one track lane fewer). A MIDI file carries it as tempo
+  changes every sixteenth a ramp moves. The tempo the screens show (and
+  `melodee_tempo`) is the lane's while the song plays.
+
+## Waiting for a hand check
+
+- P0: with Rec Quantize off, record pads against the metronome: notes sit
+  where played (before, about 8 ms late at 48 kHz, three periods).
+- P0: fast rolls and flams on the pads keep their spacing (no 3 ms jitter),
+  by ear; and a MIDI keyboard's notes the same.
+- P0: an armv7 VST2 plug-in (Acid-303 in the project now on the MPC)
+  playing while its parameters are turned on its page: no dropouts.
+- P1: ratchets by ear: a hat at 2-8 hits with a ramp down and up, a kit
+  pad's pitch ramp (a tom rising), a synth note ratcheted; say if the
+  hits' gate (a tenth short, as a note's) wants to be shorter on synths.
+- P1: locks by ear: a kit's hat with its tune locked up on one step and its
+  level down on another, a synth's cutoff locked on one note of a line;
+  say if a lock should last until the lane's next note instead of its own
+  note's length.
+- P1: Note Repeat by hand: a pad held lightly and hard (the repeats follow
+  the pressure; say if the curve wants to be steeper or start higher),
+  1/4 and 1/64 on B1 / B3 again, and a take with Seq Record kept as notes.
+- P1: the feel by ear, once round 2 has it on Time Correct's page:
+  strength from 0 to 100 on a loose take, humanize on a straight hat (say
+  if a quarter of a step at 100 is too much), a drum pattern's groove laid
+  on a bass line.
+- P1: generators by ear: Euclid rhythms on a kit's hat and rim against a
+  4/4 kick (E(3,8), E(5,12), rotated), and each variation of a beat and a
+  bass line; say if Busier or Humanised at 30 % is too much or too little.
+- P1: Fill by hand: Play held while playing for a bar, FILL steps heard and
+  NOT FILL ones dropped, back on release; say if Play's hold should wait a
+  moment (a tap does nothing while playing).
+- P2: the synths by ear after their own control steps: now the plug-ins'
+  (Melodee Poly with LFO and vibrato, Melodee PD with the wheel and an LFO
+  on pitch, each stepping its modulation from its last note): no zipper,
+  nothing changed. Their checks live with them (mpc-vst-melodee-*).
+- P2: the overload guard by ear: a project pushed past 85 % (busy kits;
+  plug-ins have no voices to give): voices thin and tails shorten instead of crackles;
+  say if 85 / 70 % or the 30 ms tail suit, and whether reverb tails should
+  shorten too.
+- P2: samples at 48 and 96 kHz against 44.1: a kit, a long loop and
+  pitched pads sound the same or brighter, never duller; Trim and Chop's
+  playheads sit on the waveform as at 44.1 kHz.
+- P2: the Tracks cells' load bars and Settings' AUDIO DSP row at a glance
+  while a busy project plays.
+- P3: layers by ear: a kit pad split soft / hard by velocity, a snare's
+  hits in Cycle and Random, LOAD and CLEAR by hand; the Dirty Drummer kit's
+  layered pads (now pad layers, their volume folded into the pad's gain)
+  against how they sounded streamed.
+- P3: XFADE by ear on a sustained loop that clicks at its seam, and on the
+  whole-file dip; say whether new loops want a default (10 ms?) and whether
+  linear or equal power suits.
+- P3: a 16 Levels Filter sweep recorded with Seq Record plays back at the
+  cutoffs heard.
+- P3: Chop a break, save, open again: Chop shows the same slices; a kit
+  loaded, pads erased, saved: `melodee_pad_slots` falls, and undo after the
+  save still plays what it restores.
+- P3: Resample on Song, a short song and one past 60 s, onto a pad.
+- P3: instruments by ear: an SFZ piano with release noise (`trigger=release`,
+  `rt_decay`), a keyswitched SFZ, velocity crossfades; a General MIDI `.sf2`
+  (the preset list, a piano, a stereo preset, how long the first load
+  takes) and a DecentSampler preset with tags and release samples.
+
+- P4: delay compensation by ear and with a MIDI monitor: a plug-in effect
+  with latency (or a Limiter at LOOKAHEAD 10 ms) on one kit track, the other
+  tracks still on the beat with it; an Open MPC effect at 48 kHz; a MIDI
+  track's notes and MIDI clock late by `melodee_pdc` against before.
+- P4: a bass keyed by the kick (Compressor KEY 1), a pad gated by a hat
+  (Gate KEY), and a bus keyed by a track: say whether the block-late keys
+  (bus to track, loop tracks) are heard.
+- P4: SYNC 1/8D on a Delay with a tempo change mid-song (a pattern's own
+  BPM): the glide sounds like tape, not a click.
+- P4: the mix's Motion: a track's level and a send recorded with Seq
+  Record, a master Width or return moved by a pattern; Stop puts them back.
+- P4: an LFO on a cutoff (free and on the clock), a follower of the kick on
+  a pad's level, a macro on three lanes; say whether a modulator should
+  also show on Motion's graph.
+- P4: MIDI tracks with a real synth on the jacks and on USB: slots of each
+  kind (14-bit, NRPN, bend), thinning on a fast turn, a pattern's own
+  program at its launch, a Drum map, MIDI in echoed (and the loop guard with
+  Local On), DELAY ±, a USB device by name unplugged and back (OFFLINE),
+  SysEx on load and by Push on DIN (pacing), an input as the track's sound
+  and IN USE when the route is elsewhere.
+- P4: STEMS of a song (the folder, each file lining up with Mix.wav in a
+  DAW), a 16-bit mixdown (no audible noise floor change), a MIDI file
+  exported and opened in a DAW, and a `.mid` laid on a kit and a synth.
+
+- P5: scenes by hand: SCENES (Push on Patterns) while playing, a scene
+  launched waits for its bar (blinking) and its tempo takes over there;
+  Erase + pad, naming on Push, the wheel's tempo; say whether a track
+  with nothing in the column should stop (iOS) rather than play on.
+- P5: follow actions by ear: Next after 2 bars round three patterns, Any
+  at 50 % against Again, a 1.5-bar pattern followed after a play (it
+  changes off the bar line), Stop; a chained track ignoring them; B3 ALL
+  on a column.
+- P5: capture by hand: jam on two tracks with Seq Record off (pads and a
+  MIDI keyboard on another track's channel), Shift + Seq Record: both
+  land in their next empty patterns over the same bars; once stopped with
+  no click (the first note as the downbeat); Auto against 4 bars; say if
+  a two-bar gap ends a phrase too soon or too late.
+- P5: the tempo lane by ear: a step and a ramp under a SYNC delay, an LFO
+  on the clock, the arp and the click; a mixdown and stems across a ramp;
+  the MIDI file's tempo map in a DAW; MIDI clock out to outside gear
+  following the ramp.
+
+## P0: timing
+
+- [x] Recorded notes land where they were heard: `Context::record`
+  (`shell/context.cpp`) takes `host.position_of()`, the tick the engine is
+  on when the MIDI thread sees the hit, so a take with Rec Quantize off is
+  late by the output latency (about 8.7 ms at 3 × 128 frames). Place it
+  from the hit's timestamp minus the output latency, as Manual chop's taps
+  already are (`shell/shell.cpp`, `tap_frames`). Host test with a known
+  latency.
+- [x] Live notes at their frame: pad and MIDI-in Note On / Off (and
+  `PadNote`, `ArpKey`) are applied at the start of the next block
+  (`EngineHost::render`), so a hit moves by up to a block. Carry the
+  rawmidi timestamp to a frame (`clock.frame_at`) and play it at a fixed
+  one-block delay at that frame (split the block there, as ticks do). Host
+  test: two hits a known time apart come out that far apart.
+- [x] The MIDI thread (`Controller::run_midi` in the base) at a low
+  real-time priority (SCHED_FIFO below the audio thread's 30 and the
+  pager's 20, e.g. 15); it sleeps in `poll`, so it cannot starve anything.
+- [x] VST2 bridge: the `vst2_bridge32` worker that answers the audio
+  thread runs at SCHED_FIFO with the audio thread's priority (set in the
+  bridge, or by the host on the child); the connection lock the audio
+  thread shares with parameter reads from the MIDI thread
+  (`plugin/vst2_bridge_instance.h`) becomes priority-inheriting, or the
+  reads come from a lock-free copy, so the audio thread never waits on a
+  normal-priority thread.
+
+## P1: drums and sequencer
+
+Reference: melodee-ios (the sibling checkout `../melodee-ios`,
+`MelodeeKit/Sources/MelodeeAudio/Pattern.swift` and `NoteEffects.swift`)
+has ratchets, conditions, lane lengths and Euclid already; port the
+behaviour, write the code fresh for this app.
+
+- [x] Ratchet: `Event` gains a ratchet (1–8 hits inside the note's length)
+  and a ramp (−100..100, the last hit's velocity in percent of the
+  note's); on a kit also a pitch ramp if it fits. The repeats play through
+  the late-note path the arp uses (`run_late`). File section, Steps / Step
+  Edit / Roll editing, drawn on Steps and Roll, previews, tests.
+- [x] Trig conditions: always, n:m (2..8), FILL / NOT FILL, FIRST / NOT
+  FIRST, PRE / NOT PRE, NEI / NOT NEI, beside chance; a pass counter a
+  track (a kit lane of its own length counts its own); a held control for
+  Fill.
+- [x] Per-step locks and Motion depth: Motion is 256 events for the whole
+  project at sixteenth resolution, found by a linear scan
+  (`model/project.h`). Store it per pattern with room for thousands, at
+  tick resolution; holding a step on Steps (or the note in focus on Roll /
+  Step Edit) and turning a pot writes a lock on that step. Old `MOTN`
+  sections still load.
+- [x] Kit lanes of their own length (polymeter inside a kit).
+- [x] Note Repeat: pad pressure sets the repeats' velocity (as the MPC),
+  1/4 and 1/64 rates, the repeats written as notes under Seq Record.
+- [x] Humanize in Time Correct (a random timing and velocity amount) and a
+  groove taken from one pattern and laid on another.
+- [x] Generators: Euclid on a kit lane (hits, steps, rotate); a pattern's
+  variations (thinner, busier, humanised, reversed, an octave up / down).
+- [x] A track's playback speed (×½, ×¾, ×1, ×3/2, ×2) without rewriting
+  its notes.
+
+## P2: CPU scheduling
+
+- [x] One dispatch a block: `EngineHost::render` splits the block at every
+  tick, events or not, and calls `workers.run` (a barrier) for each part,
+  then once more for the chains. Engines take the block's events with
+  frame offsets and render it whole; each track's engine and chain become
+  one job; a block has one barrier. A test plays a busy project both ways
+  and compares output sample for sample (or within float noise, said why).
+- [x] With one dispatch, drop or shorten the workers' 200 µs spin
+  (`engine/render_pool.cpp`); measure CPU before and after on the device.
+- [x] Buses A–D, L1–L4 and their chains as parallel jobs after the tracks.
+- [x] Core pinning, measured: today audio plus three workers float over
+  four cores at SCHED_FIFO. Try two workers with the audio thread on cores
+  1–3 and the rest on core 0 against today's, on a busy project; keep the
+  better as the default and the other on `$MELODEE_RENDER_THREADS` / a
+  setting.
+- [x] DSP load shown: each track's share of the block (`track_ns`) on
+  Tracks, the whole on Settings' AUDIO beside the dropouts; a dropout notes
+  the busiest track in `status`.
+- [x] Overload guard: as block time nears its budget, steal the oldest
+  voices and shorten tails before a dropout.
+- [x] Samples resampled once at load to the device rate (projects keep
+  44.1 kHz frame counts), not per voice; takes, Recall, Resample and
+  mixdowns recorded and saved at the device rate too (decisions).
+
+## P3: sampler
+
+- [x] Pad layers: up to four samples a pad, by velocity range, cycle or
+  random (MPC programs' layers keep working as they do).
+- [x] Chop's slices kept with the project.
+- [x] Sample slots nothing uses any more freed on save.
+- [x] Pad Link through more than one pad.
+- [x] Seq Record keeps a 16 Levels pad's cutoff.
+- [x] A short crossfade at a loop's seam.
+- [x] Resample of the song onto a pad.
+- [x] SFZ: release samples (`trigger=release`), crossfades (`xfin_*` /
+  `xfout_*`), keyswitches; SF2 and `.dspreset` instruments.
+
+## P4: mix, effects, MIDI
+
+- [x] Plug-in delay compensation across tracks, buses and the master.
+- [x] A compressor or gate on any chain keyed by another track.
+- [x] SYNC on Delay and Diff Delay (note values from the song's clock).
+- [x] Motion lanes for a track's level and send and the master's values.
+- [x] Modulators: LFOs (free or on the clock) and envelope followers on
+  any parameter; macros.
+- [x] MIDI tracks M2–M5 ([MIDI_TRACKS.md](MIDI_TRACKS.md)), its open
+  questions decided as above.
+- [x] Stems to the card, Standard MIDI Files in and out, dither on the
+  mixdown.
+
+## P5: performance and arrange
+
+- [x] Scenes (a column of patterns with a name and tempo) and clip follow
+  actions (next, previous, any, again, stop; after bars or plays; chances).
+- [x] Always-on capture: the last minutes of every track's played notes,
+  kept to a pattern after the fact.
+- [x] Tempo changes over the song (a tempo lane on Song).
+
+## Log
+
+- 2026-11-12: roadmap made from a read of the engine, the render pool, the
+  base's threads and melodee-ios; nothing built yet.
+- 2026-11-12, P0 timing: a note from a pad or MIDI in carries its receive
+  stamp (base 039c64e: `SurfaceEvent::timestamp_ns`) and plays a block
+  after it, at its frame (`EngineHost::send_at`, `take_commands`); Seq
+  Record places it from that stamp less the output latency, on the nearest
+  tick (`heard_place`, a ring of each tick's frame); the MIDI thread at
+  `SCHED_FIFO` 15 (base 7985b50); the VST2 bridge at the audio priority
+  behind a priority-inheriting lock. Host tests `hits_on_time`. On the MPC
+  (48 kHz, three periods): remote pad presses and MIDI in notes all on
+  their frame (`melodee_timed=18/0/0`), the MIDI thread at FIFO 15 and the
+  Acid-303 bridge at FIFO 30 (`/proc`), a play of the project with its
+  plug-ins without a dropout. Pushes owed in sample-base: 039c64e and
+  7985b50 (on f8d92f0 and later 12f0679, a peer's).
+- 2026-11-12, P1 drums and sequencer: ratchets with velocity and pitch
+  ramps, each hit on its frame (46e323c); trig conditions beside chance and
+  Fill on Play held (ffb5e15); Motion kept by each pattern at tick
+  resolution, 8192 points, with locks from a held step or note (b477285);
+  kit lanes of their own length (6edb0c3, which also fixed a preview and a
+  doc line a shared staging had misplaced into 8e7e690); Note Repeat at 1/4
+  and 1/64, pressure as velocity, its repeats written by Seq Record
+  (70d4e85); a pattern's feel heard live, strength, swing, humanize and a
+  groove from another pattern (7dc0858; round 2 laid it on Time Correct C,
+  a387316); generators, Euclid on a kit lane and variations (d826576); a
+  track's playback speed (7cabb1e). Host tests for each. HEAD 7cabb1e
+  passes what build.sh runs (make, the 8 unit tests, self-test, monkey 3000
+  moves, 246 previews with no text issues). On the MPC (48 kHz, remote
+  presses, every edit undone after): ratchet hits counted
+  (`melodee_hits`), Fill 1/0 (`melodee_fill`), a 1:2 condition holding
+  notes back (`melodee_trigs`), a kit's EUCLID row laying its lane and
+  Shift + K1 shortening it, locks from a held step (Motion points 0 to 2),
+  VARY's Busier into the next empty pattern, Note Repeat at 1/64 and 16
+  repeats written under Seq Record, a track at x2 and back. Pressure by
+  hand and everything by ear wait above. No base changes; no pushes owed.
+- 2026-11-12, P2 CPU scheduling: one dispatch a block, the synths
+  stepping their modulation on their own frames so it sounds the same to
+  the sample as the old way (77f001f); no spin between blocks, the workers
+  woken at a block's start, and `--melodee-dsp-bench` (1a19f91); the
+  Looper beside the tracks, buses A–D and Knob FX as a second run
+  (3a3db0f); `MELODEE_RENDER_THREADS=pinned`, floating kept as default
+  (0db8461); DSP load on Tracks, Settings' AUDIO and `status` (65e05dc);
+  the overload guard (1fbca79, which also carried UI/UX's in-progress
+  `hand_punch` engine hunks, finished in their baf457b); samples played
+  from a copy at the device's rate, band-limited (55abe30). Host tests
+  `one_dispatch` (busy project both ways, equal to the sample, with and
+  without workers), `loops_and_buses_parallel`, `overload_guard`,
+  `sample_rates_p2`. HEAD 55abe30, built in a snapshot of HEAD (the shared
+  checkout held a peer's unfinished scales/levels work whose test failed
+  in ./build.sh): make, the 8 unit tests, self-test, monkey 12 x 3000
+  moves, 248 previews with no text issues. On the MPC (48 kHz, three
+  periods), the project there with its five plug-ins playing, each core
+  busy over 12-15 s: before P2 27.9 / 28.7 / 25.9 / 28.1 %; items 1-4
+  22.4 / 20.1 / 20.2 / 20.1 %; HEAD 24.3 / 24.1 / 24.0 / 24.0 %; render
+  load peak 24-26 % throughout (pinned: 28.5 %). `--melodee-dsp-bench`
+  (16 busy tracks, a block a period at FIFO 30, beside the running app):
+  the old way (every track cut at every tick, workers kept awake 200 µs
+  after every run) 208-215 % CPU, mean block 1377-1545 µs, p99 1551-1977;
+  HEAD 187-192 %, mean 1376-1487 µs, p99 1498-1796; none over budget. A
+  peer deployed the shared build over HEAD at 03:27 UTC; the MPC runs that.
+  No base changes; no pushes owed.
+- 2026-11-12, the synths leave Melodee (Kerem's call): PROPHET, CZ and SID
+  became Open MPC plug-ins in their own repositories, Melodee Poly, PD and
+  Chip (mpc-vst-melodee-poly, -pd, -chip: their DSP rendered side by side
+  with Melodee's engines, identical to the bit), and FM6 and the 909 kit
+  are gone. A project from before opens those synths' tracks as PLUGIN
+  tracks on the plug-ins with their values as state (`Plugins/...` from the
+  card's top), FM6 and 909 tracks empty with their notes. PLUGIN tracks send
+  the accent as velocity and Slide / Tie as CC 84 (CC 68 over a tie); Open
+  MPC plug-ins run at 44.1 kHz and are converted to the device's rate
+  (`plugin/rate_bridge.h`). Host tests `synths_as_plugins`; the tests that
+  used PROPHET as a sound play PLUGIN tracks through a test tone runner, or
+  kits.
+
+- 2026-11-12, P3 sampler: pad layers (a32c7db), Pad Link chains (72c7369),
+  a loop seam crossfade (5ab0389), Resample on Song (0f987a5), SFZ release
+  samples, crossfades and keyswitches with SF2 and DecentSampler presets
+  (a8fa82b), Chop's slices kept with the project (8a4baa2), unused slots
+  freed on save (2ce9550), 16 Levels' cutoff kept by Seq Record (bcd49ee),
+  status fields for remote checks (3cbcfe1; a commit race in it dropped
+  7e3d406's Stage tweak, restored by the watcher in bb5fe6f). Host tests
+  `pad_layers_p3`, `pad_link_chains`, `loop_seams`, `instrument_p3`,
+  `instrument_formats_p3` (a SoundFont built in the test), `chop_kept`,
+  `samples_used`, `levels_cutoff_kept`; `sampler_kit`'s engine hosts moved
+  to the heap (its frame passed 8 MB at -O2 once `PadSound` grew). Each
+  commit's host tests ran in a snapshot of its own tree; ./build.sh on the
+  shared tree passed after items 4-8 and again after 2, 3 and 5 (make, the
+  8 unit tests, self-test, monkey 12 x 3000 moves, 237-238 previews with no
+  text issues). On the MPC (48 kHz, three periods, remote presses): the
+  Dirty Drummer kit's Load Kit put pad A01's four MPC layers onto pad layers
+  in Cycle (55 slots); with Loop on, successive hits played layer slots 2,
+  3, 0, 1, one voice each; LAYERS' Shift + K1 to Velocity played all four at
+  once (`melodee_voice_slots=0,1,2,3`); A01 linked to A02 linked to A03
+  played three voices (slots 2, 4, 8) from one hit; PLAY's Shift + K3 set
+  XFADE to 20 ms; LAYERS drawn on the device as in the previews; 0 xruns, 0
+  dropped, 0 stream underruns. Every edit undone after; the project there was
+  not saved. No base changes; no pushes owed.
+
+- 2026-11-12, P4 mix, effects, MIDI: plug-in delay compensation (d7f5a06);
+  Compressor and Gate keyed by a track or bus (a2bf088); SYNC on the delays
+  (d36a09b); Motion lanes on the mix and the master (25cadc6); modulators
+  and macros on MOD (0df4209); MIDI tracks M2-M5 (6adf5e5); stems, a dithered
+  16 / 24-bit mixdown and MIDI files in and out (92184fe). Asked on the way
+  by the VST-migration session for Kerem's load dropouts, in this phase's
+  files: delay memory cleared a slice a block (73472a5) and effects set up
+  once a load (8cb3399). Host tests `delay_compensation_p4`,
+  `keyed_dynamics_p4`, `delay_sync_p4`, `mix_motion_p4`, `modulators_p4`,
+  `midi_tracks_p4`, `exports_p4`, `delay_pool_clears`. ./build.sh passed on
+  the shared tree before each commit (make, the 8 unit tests, self-test,
+  monkey 12 x 3000, up to 252 previews with no text issues; one run's
+  `overload_guard` failed under load and passed again unchanged); each
+  commit's exact tree also passed the host tests in a snapshot. On the MPC
+  (48 kHz, three periods; HEAD 8cb3399 deployed, sha256 729c9ad0…): the
+  project's five plug-ins all report no latency (`melodee_pdc=0`); a Limiter
+  at LOOKAHEAD 10 ms on track 1 made `melodee_pdc=480`, track 1's 480, the
+  pool 45/48, played 6 s with 0 xruns, undone back to 0 and 46/48; MOD drawn
+  as in the previews, ADD put an LFO on A01 PAN learned from Stage's MIX
+  (0.63 Hz), played with 0 xruns, then taken off. Every edit undone; the
+  project there was not saved. The VST-migration session's 7A loads on that
+  binary still dropped out 7 in 16 (Punch::clear's memset on Reload, theirs
+  to fix). No base changes; no pushes owed.
+
+- 2026-11-12, P5 performance and arrange: scenes, a column's name and
+  tempo launched together on the next bar, on SCENES behind Patterns'
+  Push, and follow actions brought by the audio thread on their tick
+  (3e868ef); always-on capture, every track's notes in a ring made once,
+  laid by Shift + Seq Record into each track's next empty pattern over the
+  same bars (c4d1bf0); the tempo lane on Song, stepped or ramped, followed
+  a tick at a time while the song plays (ff5a206); Recall's bars counted
+  back from the last note when stopped, and the lane's tempo shown
+  (2bc7756). Host tests `scenes_p5`, `capture_p5`, `tempo_lane_p5`.
+  ./build.sh passed on the shared tree before each commit (make, the 8
+  unit tests, self-test, monkey 12 x 3000, up to 265 previews with no text
+  issues); 2bc7756's exact tree passed the host tests in a snapshot, where
+  its binary was built (the shared tree held a peer's sampler work). On
+  the MPC (48 kHz, three periods; HEAD 2bc7756 deployed, sha256
+  5aaa3e24…; the first checks on ec2e0a78, HEAD 2a1b81b): SCENES opened
+  from Patterns' Push (`melodee_page=51`); track 1's P8 set to Next after
+  1 bar came round to P5 after its bar (`melodee_follows=1`, the track's
+  pattern followed it, S5 lit whole); S6 given 122 BPM with the wheel and
+  launched mid-bar queued its pattern for the bar line; Recall, stopped,
+  of four pad hits (16 Levels) landed in the next empty pattern, two bars,
+  at ticks 0, 144, 288, 432 (on ec2e0a78 it had counted two bars back from
+  the press and lost the hits played before the remote calls' pause:
+  fixed in 2bc7756); on Song, Shift + K1 put a 140 BPM point on bar 1 and
+  playing the song read `melodee_tempo=1400`, 1200 once it ended; 0 xruns,
+  0 dropped throughout. Every edit undone (undo stack empty), the project
+  not saved, Melodee left running. The VST-migration session measured 12
+  loads (P7 and 7A) at 0 xruns on ec2e0a78 meanwhile. No base changes; no
+  pushes owed.
+- 2026-11-12: the roadmap is complete: P0 timing, P1 drums and sequencer,
+  P2 CPU scheduling, P3 sampler, P4 mix, effects and MIDI, and P5
+  performance and arrange are built, committed and checked on the MPC;
+  what needs ears and hands waits under "Waiting for a hand check" above.
+- 2026-11-12, after the roadmap (asked by Kerem): project loads park the
+  audio thread. A load, a new project or a new rate fades the output out
+  over 10 ms, then the audio thread plays silence touching nothing while
+  the MIDI thread builds the project (EngineHost::park / reload / resume),
+  clears the delay memory the load left and fades back in; the Loading
+  sheet shows until the project's samples are read, presses wait, and the
+  heap is trimmed after. Host test `parked_load` (a real second thread).
+  On the MPC (48 kHz, three periods), 12 loads of Project 7A and Project 7
+  while playing: 0 xruns, every one parked, builds of 2.9-4.0 ms each, past
+  the 2.67 ms a block has, so each had cost a dropout in the callback.

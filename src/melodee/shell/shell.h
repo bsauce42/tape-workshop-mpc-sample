@@ -1,0 +1,269 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+#pragma once
+#include "melodee/engine/voice_tap.h"
+#include "melodee/model/project.h"
+#include "melodee/shell/tap_hold.h"
+#include "melodee/shell/menu.h"
+#include "melodee/shell/history_list.h"
+#include "melodee/shell/card_access.h"
+#include "melodee/shell/update.h"
+#include "melodee/shell/context.h"
+#include "melodee/shell/project_kits.h"
+#include "melodee/shell/light_show.h"
+#include "melodee/shell/looper_jobs.h"
+#include "melodee/shell/meter_lights.h"
+#include "melodee/shell/pad_lights.h"
+#include "melodee/shell/midi_io.h"
+#include "melodee/shell/pad_context.h"
+#include "melodee/shell/project_store.h"
+#include "melodee/shell/sample_library.h"
+#include "melodee/shell/zoom_view.h"
+#include "melodee/shell/snapshot.h"
+#include "melodee/shell/ui_state.h"
+#include "melodee/shell/voice_search.h"
+#include "runtime/app.h"
+#include "melodee/web/control_feed.h"
+#include "surface/leds.h"
+#include <atomic>
+#include <memory>
+#include <mutex>
+
+// The page router and the control grammar. It owns the project and the UI
+// state on the MIDI thread: printed buttons open their pages, B1-B3 are the
+// page's soft keys, the wheel moves the cursor and Push opens or confirms
+// (Shift + Push goes back), pots edit through pickup, Pad Bank held with a
+// pad picks a track, mute mode mutes or solos tracks or kit pads, Note
+// Repeat latches (shell/pad_bank, mute_mode, note_repeat). The screen reads it through
+// snapshot(); the audio thread only ever sees Commands.
+namespace melodee {
+
+class EngineHost;
+
+class Shell {
+public:
+    // Starts with starting_project(); the engine host is loaded from it before audio runs.
+    explicit Shell(EngineHost& host);
+
+    // MIDI thread.
+    void surface(const SurfaceEvent& event, uint32_t now_ms);
+    void lights(SurfaceLights& lights, uint32_t now_ms);
+    bool light_show_pass(SurfaceLights& lights, uint32_t now_ms); // Sample + Mute (shell/light_show.h)
+    void light_style_step(int by); // Sample + Minus / Plus while the light show is on: the next style
+    // MIDI thread (parity phase 9, shell/midi_io.cpp): MIDI in from an external port, its loss, and the timed output.
+    void midi(const MidiPortInfo& port, const MidiPacket& packet, uint32_t now_ms);
+    void midi_lost();
+    void midi_output(MidiOutput& out, MidiIo::Clock::time_point now, uint32_t now_ms);
+    void midi_panic(uint32_t now_ms); // `melodee-midi panic`, as MIDI Config's row
+    void looper_ask(const LooperAsk& ask, uint32_t now_ms); // `melodee-looper` (shell/looper_jobs.h)
+    float volume() const { return main_volume.load(std::memory_order_relaxed); }
+    // Any thread: Settings' USB volume, Full: USB-C's main mix at full main volume, the knob left out.
+    bool usb_full_volume() const { return usb_full.load(std::memory_order_relaxed); }
+    // Any thread: Settings' USB-C in (Direct) and its direct level as a gain.
+    bool usb_direct_on() const { return usb_direct.load(std::memory_order_relaxed); }
+    float usb_direct_gain() const { return direct_gain.load(std::memory_order_relaxed); }
+    unsigned screen() const { return screen_wanted.load(std::memory_order_relaxed); } // brightness %, 0: leave it
+    // Any thread: Settings' sample rate and buffer (periods): the card's from start_settings(), else the default.
+    unsigned audio_rate() const { return audio_wanted.load(std::memory_order_relaxed) & 0xfffff; }
+    unsigned audio_periods() const { return audio_wanted.load(std::memory_order_relaxed) >> 20; }
+    // Any thread: Settings' Screen Mirror (on, and its size), published with the audio format.
+    ScreenMirrorMode screen_mirror() const {
+        uint32_t wanted = mirror_wanted.load(std::memory_order_relaxed);
+        unsigned n = (wanted >> 1 & 7) % ScreenMirror::size_count;
+        return {(wanted & 1) != 0, ScreenMirror::widths[n], ScreenMirror::heights[n], (wanted & 16) ? 60u : 30u};
+    }
+    // Before the threads start: the card's settings (Settings::read() text), so that the runtime opens the audio
+    // device at their rate and buffer at once. The service thread reads the same file again later.
+    void start_settings(const std::string& text);
+    bool startup_light_show() const { return ui_.settings.boot_light_show; } // before runtime threads start
+
+    // Service thread: Power was pressed. MIDI thread acts on it in lights().
+    void power_pressed() { power.fetch_add(1, std::memory_order_relaxed); }
+    // Any thread: LEAVE was chosen on the Exit sheet.
+    bool leaving() const { return leave.load(std::memory_order_relaxed); }
+    // Any thread: POWER OFF was chosen on the Exit sheet and the project is on the card: the MPC may turn off.
+    bool powering_off() const { return power_off.load(std::memory_order_relaxed); }
+    // Any thread: page, track, the last pad's sample slot and its frames, for `status`.
+    std::string summary() const;
+    void set_web_controls(web::ControlFeed* feed) { controls_feed_=feed;context_.web_feedback=feed; } // before MIDI starts
+    bool remote_controls(const std::string& request);
+    std::string remote_controls_response();
+    bool remote_sample_search(const std::string& query);
+    void voice_search_result(const VoiceSearch::Result& result);
+
+    // Screen thread: a copy of what the page needs, taken under a short lock.
+    void snapshot(Snapshot& out, uint32_t now_ms);
+
+    // Host previews: the state to draw from, without the hardware.
+    Project& project() { return *project_; }
+    PatternBank& patterns() { return *patterns_; }
+    UiState& ui() { return ui_; }
+    Context& context() { return context_; }
+    // The app's sample library (service thread); the shell follows its changes.
+    void set_library(SampleLibrary* library) { library_ = library; context_.library = library; }
+    void set_store(ProjectStore* store) { store_ = store; context_.store = store; }
+    void set_input(InputRoute* input) { input_ = input; context_.input = input; }
+    void set_plugins(PluginRack* plugins) { context_.plugins = plugins; } // the app's plug-in rack (plugin/plugin_rack.h)
+    void set_printer(PrintEngine* printer) { context_.printer = printer; } // the app's print engine (shell/print_engine.h)
+    void print(const Context::PrintAsk& ask) { context_.print(ask); }     // MIDI thread: `melodee-print`
+    // SD card access (parity phase 10b): the MIDI thread asks, the service thread lends.
+    CardLink& card() { return card_link; }
+    // Updates from the card (shell/update.h): written by the service thread, read by the MIDI thread.
+    UpdateLink& updates() { return update_link; }
+
+private:
+    void remote_controls_tick(uint32_t now);
+    web::ControlFeed* controls_feed_ = nullptr;
+    std::mutex controls_lock_;
+    std::string controls_pending_, controls_response_ = "{}";
+    std::array<uint32_t, 24> controls_button_until_ {};
+    std::array<uint32_t, 16> controls_pad_until_ {};
+    void button(SurfaceButton button, bool pressed);
+    void press(SurfaceButton button, bool pressed); // button() inside its undo step (shell/undo_scope.h)
+    void pot(unsigned index, int position, bool syncing);
+    void wheel(int delta);
+    void pad(unsigned pad, uint8_t velocity, bool down);
+    void hit(unsigned pad, uint8_t velocity, bool down); // pad() inside its undo step
+    void check_pickup(unsigned index, const Binding& binding);
+    Takeover pot_takeover(const Binding& binding) const;
+    std::string button_text() const; // the button lights for `status`
+    std::string lit_pads_text() const; // and the lit pads
+    std::string meter_text() const;    // and the meters beside the screen
+    std::string meter_db_text() const; // and the levels they show
+    std::string pad_summary() const;   // the last pad's Sample Mode values (phase 4)
+    std::string p3_summary() const;    // roadmap P3: layers, loop crossfade, voices and their slots
+    unsigned follows_total() const;    // roadmap P5: follow actions come on every track since start
+    std::atomic<uint32_t> capture_kept {0}; // roadmap P5: notes the capture ring holds, for `status`
+    std::atomic<uint32_t> loading_now {0}, load_us_now {0}; // the Loading sheet (bit 0) and samples left; the last parked build
+    std::atomic<uint64_t> button_levels {0};
+    std::atomic<uint64_t> pad_rungs {0}, pad_hues {0}; // each pad's rung and hue (shell/pad_light.h), 4 bits a pad, for `status`
+    PadGlow pad_glow; // each pad's sound as last lit, fading (shell/pad_lights.h)
+    std::array<uint8_t, 16> pad_strikes {}; // physical strike velocity, independent of audio response settings
+    std::array<uint32_t, 16> pad_let_go {}; // when each pad was let go, ms + 1: its flare fades from there (shell/pad_lights.h)
+    unsigned count_beat_seen = 0;           // the count-in's beat the pads last pulsed for
+    uint32_t count_beat_at = 0;             // and when it began, ms
+    // Light show (shell/light_show.h): its rings and flashes, whether it was on last pass, the pads held then, and
+    // the selected track's voices seen then.
+    LightShow show_lights;
+    bool show_was_on = false;
+    uint32_t show_pads_seen = 0;
+    std::array<uint32_t, TrackTaps::voices> show_voices_seen {};
+    PadFacts pad_facts() const;             // what pad_context() asks of the shell (shell/pad_context.h)
+    MeterReads meter_reads; // the meter lights beside the screen as last read (shell/meter_lights.h)
+    std::atomic<uint32_t> meter_bits {0}; // their LEDs (left, right << 8) and the input shown (<< 16), for `status`
+    bool record_track_keys() const; // Record: a synth track source plays the pads (Minus / Plus: its octave)
+    bool kit_pads() const; // the pads play the kit here: Erase + pad deletes, Shift + Erase copies
+    bool key_pads() const; // the pads play a synth's keys here: Erase + pad erases the key's notes, Shift + Erase copies them
+    bool song_buttons() const { return ui_.page == PageId::Song && !ui_.song_export && !ui_.shift; } // Chop, Erase, Note Repeat work on the clip
+    void end_copy_away();  // copying stops away from the pads it copies
+
+    EngineHost& host;
+    std::unique_ptr<Project> project_;
+    std::unique_ptr<PatternBank> patterns_;
+    UiState ui_;
+    Context context_;
+    std::mutex lock; // MIDI thread while it changes state; screen thread while it copies
+    // Presses the Loading sheet took (ui.loading): their releases are taken too, even after it has gone.
+    std::array<bool, 256> eaten_buttons {};
+    std::array<bool, 128> eaten_pads {};
+    CompTrail comp_trail; // the screen thread's, in snapshot(): the Compressor page's picture over time
+    CompBar comp_bar;     // and over one bar of the song (round 2, compressor B)
+    HeadTrail trail; // the screen thread's, in snapshot(): heads kept while their wakes fade
+    std::atomic<float> main_volume {0.7f};
+    std::atomic<unsigned> screen_wanted {0}; // 0 until the settings say; then 20..100 %
+    std::atomic<uint32_t> audio_wanted {44100u | 3u << 20}; // rate | periods << 20
+    std::atomic<uint32_t> mirror_wanted {3u << 1}; // on | size << 1 | 60 fps << 4: off, 1280 x 960, 30 fps
+    std::atomic<bool> usb_full {true}, usb_direct {true};
+    std::atomic<float> direct_gain {1.0f};
+    void want_audio_format() {
+        audio_wanted.store(ui_.settings.audio_rate | uint32_t(ui_.settings.audio_periods) << 20, std::memory_order_relaxed);
+        mirror_wanted.store(uint32_t(ui_.settings.mirror) | uint32_t(ui_.settings.mirror_size & 7) << 1 | uint32_t(ui_.settings.mirror_fps == 60) << 4,
+                            std::memory_order_relaxed);
+        usb_full.store(ui_.settings.usb_full, std::memory_order_relaxed);
+        usb_direct.store(ui_.settings.usb_direct, std::memory_order_relaxed);
+        direct_gain.store(ui_.settings.direct_gain(), std::memory_order_relaxed);
+    }
+    std::atomic<unsigned> power {0};
+    unsigned power_seen = 0;
+    std::atomic<bool> leave {false}, power_off {false};
+    SampleLibrary* library_ = nullptr;
+    unsigned library_seen = ~0u;
+    std::array<int16_t, track_count> keyed_roots_sent = [] { std::array<int16_t, track_count> a {}; a.fill(60); return a; }(); // as the sampler starts
+    uint32_t holds_at = 0;      // when the long samples' held chunks were last looked at (lights.cpp)
+    FrameView zoomed_view() const; // Trim's or Chop's view zoomed in, in 44.1 kHz frames; none when not zoomed
+    StreamHolds holds_sent;     // what the library was last asked to hold
+    unsigned format_seen = 0; // the engine's format_changes() the project was last sent again for
+    EncoderHold enc; // the encoder's push: a tap is the page's, a hold opens the MENU (shell/menu.h)
+    TapHold tap; // Tap Tempo held: the tempo on the encoder, or the Tempo page (shell/tap_hold.h)
+    HistoryHold history_hold; // Shift + Minus: a tap undoes, a hold opens the undo list (shell/history_list.h)
+    // Background save (shell/autosave.h): when a control or a note last came in, and the last save that found no card.
+    uint32_t last_input_ = 0, autosave_try_ = 0;
+    bool autosave_failed_ = false;
+    // The usage log (shell/usage_log.h, on in Settings): the state as a button went down, held until its release
+    // to tell whether the press (or anything while it was down) changed something; one for the wheel's turns.
+    struct UsageMark { UiState ui; uint32_t pushes = 0, sent = 0; bool dirty = false; };
+    std::array<std::unique_ptr<UsageMark>, size_t(SurfaceButton::Count)> usage_marks;
+    std::unique_ptr<UsageMark> wheel_mark;
+    uint32_t usage_pushes_ = 0;
+    void usage_mark(UsageMark& mark) const;
+    bool usage_changed(const UsageMark& mark) const;
+    void usage_tick(uint32_t now); // MIDI thread, from lights(): the page, the lesson, edits kept, the lines to the card
+    void autosave_tick(uint32_t now); // MIDI thread, from lights()
+    ProjectStore* store_ = nullptr;
+    InputRoute* input_ = nullptr;
+    bool voice_button_held = false;
+    bool voice_search_page() const;
+    bool voice_input_free() const;
+    CardLink card_link;
+    UpdateLink update_link;
+    std::string update_offer; // MIDI thread: offered version, waiting until playback stops
+    void update_tick();       // MIDI thread, from lights(): update question, install start, progress
+    MidiIo midi_io;
+    unsigned store_seen = ~0u, settings_seen = ~0u, sounds_seen = ~0u;
+    bool settings_loaded = false;
+    int leave_after_save = -1; // the saves count to wait for before leaving
+    bool off_after_save = false; // and then turn the MPC off instead of starting the stock app
+    uint32_t off_saved_at = 0;   // when the save to turn off after landed (ms): the MPC turns off a second later
+    std::atomic<uint32_t> page_track {0}, pad_sample {0}, pad_frames {0}, tempo_now {0}; // copies for summary()
+    std::atomic<uint32_t> stage_bits {0};
+    std::string stage_key_text; // under text_lock
+    // Phase 2, for remote checks: Seq Record (0 off, 1 armed, 2 recording), the selected pattern's
+    // length in ticks, its notes, its Q and the first note's tick, and the time signature.
+    std::atomic<uint32_t> rec_state {0}, pattern_ticks {0}, pattern_events {0}, pattern_q {0}, first_tick {0}, signature_now {0};
+    std::atomic<uint32_t> step_now {0}, event_now {0}, step_events_now {0}, event_tick {0}, ask_now {0}, motion_now {0}; // Step Edit, a question, Motion
+    // Roll: the cursor's key, whether a note is in focus, the first step in view, the top row's key, the sheet open.
+    std::atomic<uint32_t> roll_key_now {0}, roll_focus_now {0}, roll_view_now {0}, roll_top_now {0}, sheet_now {0};
+    std::atomic<uint32_t> pad_bits {0}; // phase 4: the last pad's loop, lock, Note On, reverse, mono, filter, link; 16 Levels (summary())
+    std::atomic<int32_t> pad_gain {0};
+    // Roadmap P3, for remote checks: the last pad's layers (count, how a hit picks) and loop crossfade; the selected
+    // track's voices heard now and the sample slots they play (a bit a slot).
+    std::atomic<uint32_t> p3_bits {0}, voices_now {0};
+    std::atomic<uint64_t> voice_slots {0};
+    // Phase 5: Chop (type, slices, the slice in hand, armed), the last pad's region and file, slots
+    // used, the browser (rows, cursor, drive, preview) and its folder.
+    std::atomic<uint32_t> record_bits {0}; // phase 6: source, monitor, the take's pad + 1, cuts, rendering, pick, threshold
+    std::atomic<uint32_t> knob_bits {0}, knob_targets {0}, comp_bits {0}, comp_side {0}; // phase 7: Knob FX and the master compressor (Sidechain, key)
+    std::atomic<uint32_t> padfx_bits {0}, punch_slots_bits {0};            // phase 7b: Pad FX and Flex Beat
+    std::atomic<uint32_t> fader_bits {0}, fader_value {0};                 // phase 8: the fader
+    std::atomic<int> fader_at {-1};                                        // and where it sits
+    std::atomic<uint32_t> chop_bits {0}, pad_start_now {0}, pad_end_now {0}, files_bits {0};
+    std::atomic<int> pad_root_now {root_none}; // the last pad's sample's note (SampleRef::root), for `status`
+    mutable std::mutex text_lock;
+    std::string pad_name_text, folder_text; // under text_lock
+    // Phase 10: undo depth, Seq held / the sampler map / a gesture open, the last step's name (under text_lock).
+    std::atomic<uint32_t> phase10_bits {0};
+    std::atomic<uint32_t> jam_bits {0}; // jam capture: the run's bars, logging (<< 10), jams kept (<< 11), JAMS open (<< 15), the song's markers (<< 16), tempo points (<< 21)
+    std::string undo_text;
+    std::string phase10_summary() const;
+    std::string jam_summary() const;
+    std::string input_summary() const;  // phase 6: Input Config, takes, Recall, renders
+    std::string fx_summary() const;     // phase 7: Knob FX, the master compressor
+    std::string padfx_summary() const;  // phase 7b: Pad FX, Flex Beat
+    std::string fader_summary() const;  // phase 8: the fader and the takeover modes
+    std::string midi_config_summary() const; // phase 9: MIDI Config
+    std::atomic<uint32_t> midi_bits {0}, track_channel {0}, midi_row {0};
+    std::string sample_summary() const;
+};
+
+
+} // namespace melodee

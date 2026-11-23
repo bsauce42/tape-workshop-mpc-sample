@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+#pragma once
+#include "drivers/usb_gadget.h"
+#include <cstdint>
+#include <memory>
+#include <string>
+
+namespace juce { class Image; }
+
+// Screen Mirror: the screen as a USB webcam over USB-C, so a computer (or a
+// tablet that takes USB cameras) shows it in any camera app. The MPC offers
+// one picture size and rate, the ones asked for, always the screen scaled by
+// a whole number (drivers/mirror_frame.h), 30 or 60 pictures a second: as
+// YUYV, every pixel exact, when one endpoint carries it (320 x 240 at either
+// rate, 640 x 480 at 30), else made JPEG by the RK3566's encoder
+// (drivers/jpeg_encoder.h). A picture is made only when the screen changed,
+// and sent from a steady buffer (two frames behind the screen) so pictures
+// go out evenly spaced.
+//
+// Its own thread does the work: loads kernel/uvc's webcam function
+// (sample_base_uvc, from inside the binary) and, for JPEG, kernel/vepu's
+// encoder switch (sample_base_vepu, never unloaded), links the webcam into
+// the USB gadget (gadget_add_mirror(); the gadget rebinds, so USB audio, MIDI
+// and SSH drop for about a second), answers the computer and sends the
+// pictures. Turning it off unlinks the webcam and unloads its module.
+//
+// The camera is never unplugged under a computer showing it (an app such as
+// OBS may not survive it): while one streams, turning it off or another size
+// waits until the computer stops (ScreenMirrorStatus::held), the card is not
+// lent (CardShare::lend() refuses: the webcam would have to step out) and the
+// USB-C audio rate does not follow the device (both rebind the gadget);
+// gadget_mirror_live() says so to them. When the app stops, the webcam stays
+// in the gadget, so a restart does not rebind: a computer streaming sees its
+// picture stand still and the new process sends again (kernel/uvc replays
+// STREAMON to it). install/restore-stock.sh takes the webcam out for the
+// stock app unless a computer was showing it.
+struct ScreenMirrorMode {
+    bool on = false;
+    unsigned width = 1280, height = 960;
+    unsigned fps = 30;
+    bool operator==(const ScreenMirrorMode& o) const { return on == o.on && width == o.width && height == o.height && fps == o.fps; }
+    bool operator!=(const ScreenMirrorMode& o) const { return !(*this == o); }
+};
+
+enum class MirrorState : uint8_t {
+    Off,        // no webcam in the gadget
+    Starting,   // modules, encoder, gadget
+    Waiting,    // offered; no computer is showing it
+    Streaming,  // a computer takes the pictures
+    CardShared, // stepped out while the card is lent
+    Failed,     // see error; tried again after a change of mode
+};
+const char* mirror_state_name(MirrorState state);
+
+struct ScreenMirrorStatus {
+    MirrorState state = MirrorState::Off;
+    MirrorFormat format;    // what the computer is offered
+    bool fallback = false;  // a JPEG size was asked for and no encoder came up: the largest YUYV that fits instead
+    bool held = false;      // the app asked for a change (off, another size) that waits: a computer shows the camera
+    uint64_t frames = 0;    // pictures sent since start
+    uint64_t late = 0;      // ticks with no picture sent: every buffer still with the computer, or this thread busy
+    uint64_t bad = 0;       // pictures the kernel marked bad (a request missed its microframe; the computer drops them)
+    std::string error;
+};
+
+class ScreenMirror {
+public:
+    // The sizes offered (the app's setting picks one), each the screen times a whole number: 1, 2, 3 (with black
+    // at the sides), 4; and the rates. Larger sizes cost the encoder more than a frame at 60 fps.
+    static constexpr unsigned size_count = 4;
+    static constexpr unsigned widths[size_count] {320, 640, 1280, 1280}, heights[size_count] {240, 480, 720, 960};
+    static constexpr unsigned rate_count = 2;
+    static constexpr unsigned rates[rate_count] {30, 60};
+
+    // `initial`: the app's mode at start, so that a restart keeps a webcam
+    // already linked for it (no rebind) instead of taking it out first.
+    explicit ScreenMirror(const ScreenMirrorMode& initial);
+    ~ScreenMirror();
+    ScreenMirror(const ScreenMirror&) = delete;
+    ScreenMirror& operator=(const ScreenMirror&) = delete;
+
+    // Any thread: what the app wants. Acted on within a few tenths of a second.
+    void set_mode(const ScreenMirrorMode& mode);
+    // Screen thread: the picture the panel now shows (320 x 240 ARGB), after
+    // a change; wants_frame() asks for one when the mirror has none yet.
+    bool wants_frame() const;
+    void offer(const juce::Image& screen);
+    ScreenMirrorStatus status() const;
+
+private:
+    struct Worker;
+    std::unique_ptr<Worker> worker;
+};

@@ -1,0 +1,353 @@
+--- a/src/melodee/pages/plugin_view.cpp
++++ b/src/melodee/pages/plugin_view.cpp
+@@ -10,6 +10,7 @@
+ // header's (pages/edit_page.cpp).
+ #include "melodee/pages/common.h"
+ #include "melodee/ui/widgets.h"
++#include "melodee/pages/plugin_controls.h"
+ #include <filesystem>
+
+ namespace melodee {
+@@ -49,6 +50,10 @@
+         if (code.isNotEmpty()) p.text(code, x + 56, top + 62, w - 56, 14, p.fit(code, plain(colour::dim, type::small), w - 56, type::floor));
+         return;
+     }
++    if (panel.rows && !s.ui.shift) {
++        draw_plugin_controls(p, panel, top, s.ui.track);
++        return;
++    }
+     if (!panel.rows) {
+         icon(p, Icon::Sliders, x + w / 2 - 14, top + 40, 28, colour::dim, 1.4f);
+         p.text("NONE", x, top + 74, w, 14, caps_text(colour::dim), juce::Justification::centred);
+--- /dev/null
++++ b/src/melodee/pages/plugin_controls.h
+@@ -0,0 +1,87 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// Copyright (C) 2026 Tape Workshop contributors
++#pragma once
++#include "melodee/plugin/plugin_panel.h"
++#include "melodee/ui/paint.h"
++#include <algorithm>
++#include <cmath>
++
++namespace melodee {
++inline void draw_plugin_output(ui::Paint& p, const PluginPanel& panel, float x, float y, float width) {
++    using namespace ui;
++    p.fill(x, y, width, 28, juce::Colour(0xff080910), 3);
++    for (unsigned channel = 0; channel < 2; ++channel) {
++        const auto& scope = channel ? panel.scope_right : panel.scope;
++        const auto ink = juce::Colour(channel ? 0xff67dfdb : 0xffc49aff);
++        const float mid = y + 7 + channel * 14, left = x + 13, span = width - 68;
++        p.fill(left, mid, span, .5f, colour::line);
++        float peak = 0;
++        for (unsigned n = 0; n < scope.size(); ++n) {
++            const auto pair = scope[n];
++            const float high = float(pair >> 16) / 32767.f;
++            const int bottom = int(pair & 65535);
++            const float low = (bottom >= 32768 ? bottom - 65536 : bottom) / 32767.f;
++            peak = std::max({peak, high, -low});
++            const float above = std::sqrt(std::clamp(high, 0.f, 1.f)) * 5.8f;
++            const float below = std::sqrt(std::clamp(-low, 0.f, 1.f)) * 5.8f;
++            if (above + below > .05f)
++                p.fill(left + n * span / scope.size(), mid - above, std::max(1.f, span / scope.size() - .5f), above + below, ink);
++        }
++        p.text(channel ? "R" : "L", x + 2, mid - 6, 10, 12, plain(ink, 9, Weight::Bold));
++        const auto db = peak > .00001f ? juce::String(20.f * std::log10(peak), 1) : juce::String("-inf");
++        p.text(db + " dB", x + width - 54, mid - 6, 51, 12, plain(ink, 9, Weight::Bold), juce::Justification::centredRight);
++    }
++}
++
++// A portable host editor: every value and label comes from the loaded plug-in.
++// Drawing only; the existing Melodee bindings still own K1-K3, pickup and undo.
++inline void draw_plugin_controls(ui::Paint& p, const PluginPanel& panel, float top, unsigned track = 0) {
++    using namespace ui;
++    constexpr float x = zone::pad, width = zone::width - 2 * x;
++    const auto accent = juce::Colour(0xffc49aff);
++    const auto dark = juce::Colour(0xff111018);
++    p.fill(x, top + 1, width, 140, dark, 4);
++    const auto name = juce::String::fromUTF8(panel.name);
++    p.text(name, x + 7, top + 3, width - 88, 20,
++           p.fit(name, plain(colour::text, 15, Weight::Bold), width - 88, type::floor));
++    p.text(juce::String(panel.row + 1) + " / " + juce::String(panel.rows),
++           x + width - 76, top + 4, 68, 18, caps_text(accent), juce::Justification::centredRight);
++    if (panel.live_analyzer) draw_plugin_output(p, panel, x + 4, top + 26, width - 8);
++    const bool live = panel.live_analyzer;
++    constexpr float gap = 4, cw = (width - 16) / 3;
++    for (unsigned k = 0; k < panel.params.size(); ++k) {
++        const float left = x + 4 + k * (cw + gap), y = top + (live ? 58 : 27);
++        const auto& control = panel.params[k];
++        const auto ink = knob_shade(track, k);
++        p.fill(left, y, cw, live ? 66 : 93, colour::panel, 3);
++        if (!control.used) {
++            p.text("UNUSED", left, y + (live ? 25 : 38), cw, 15, caps_text(colour::dim), juce::Justification::centred);
++            continue;
++        }
++        const auto label = juce::String::fromUTF8(control.name);
++        auto style = plain(colour::text, live ? 9 : 10, Weight::Bold);
++        const auto lines = p.wrap(label, style, cw - 8, 2);
++        for (int line = 0; line < lines.size(); ++line)
++            p.text(lines[line], left + 4, y + 3 + line * 10, cw - 8, 11, style, juce::Justification::centred);
++        const float value = std::clamp(control.value / float(plugin_param_max), 0.f, 1.f);
++        const float cx = left + cw / 2, cy = y + (live ? 35 : 49), radius = live ? 11 : 18;
++        constexpr float begin = -2.35f, end = 2.35f;
++        juce::Path track, filled;
++        track.addCentredArc(cx, cy, radius, radius, 0, begin, end, true);
++        filled.addCentredArc(cx, cy, radius, radius, 0, begin, begin + value * (end - begin), true);
++        p.g.setColour(colour::line);
++        p.g.strokePath(track, juce::PathStrokeType(live ? 2 : 3));
++        p.g.setColour(ink);
++        p.g.strokePath(filled, juce::PathStrokeType(live ? 2 : 3));
++        p.circle(cx, cy, radius - (live ? 3 : 5), dark);
++        const float angle = begin + value * (end - begin);
++        p.g.setColour(ink);
++        p.g.drawLine(cx, cy, cx + std::sin(angle) * (live ? 7 : 10), cy - std::cos(angle) * (live ? 7 : 10), 2);
++        const auto text = juce::String::fromUTF8(control.text);
++        p.text(text, left + 3, y + (live ? 48 : 72), cw - 6, 17,
++               p.fit(text, plain(ink, live ? 11 : 12, Weight::Bold), cw - 6, type::floor), juce::Justification::centred);
++    }
++    p.text("K1-K3: EDIT   -/+: PAGE", x + 5, top + 126, width - 10, 14,
++           plain(colour::sec, 9, Weight::Medium), juce::Justification::centred);
++}
++} // namespace melodee
+--- a/src/melodee/pages/chain_page.cpp
++++ b/src/melodee/pages/chain_page.cpp
+@@ -16,6 +16,7 @@
+ // drawn in neutral.
+ #include "melodee/engine/effect_info.h"
+ #include "melodee/pages/common.h"
++#include "melodee/pages/plugin_controls.h"
+ #include "melodee/pages/pages.h"
+ #include "melodee/shell/bindings.h"
+ #include "melodee/ui/widgets.h"
+@@ -141,6 +142,16 @@
+     }
+     frame(p, s, keys, h);
+     if (s.ui.picker_open) { picker(p, s, c); return; }
++    if (!s.ui.sheet_open && !s.ui.shift && cursor < count && plugin_slot(chain.slots[cursor])) {
++        const auto& panel = s.ui.plugin_panel;
++        if (panel.entry == unsigned(chain.slots[cursor].params[0]) && panel.status == PluginStatus::Ready && panel.rows) {
++            draw_plugin_controls(p, panel, zone::picture_y, s.ui.track);
++            if (chain.slots[cursor].bypass)
++                p.text("BYPASSED", zone::pad + 5, zone::picture_y + 124, zone::width - 2 * zone::pad - 10, 14,
++                       caps_text(colour::rec), juce::Justification::centred);
++            return;
++        }
++    }
+     fx_strip(p, chain, cursor, c, zone::picture_y + 6);
+     float y = zone::picture_y + 54, bottom = zone::picture_y + zone::picture_h - 4;
+     fx_in_hand(p, s, chain, cursor, c, y, bottom);
+--- /dev/null
++++ b/src/melodee/plugin/output_scope.h
+@@ -0,0 +1,51 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// Copyright (C) 2026 Tape Workshop contributors
++#pragma once
++#include <algorithm>
++#include <array>
++#include <atomic>
++#include <cmath>
++#include <cstdint>
++
++namespace melodee {
++// One audio writer; a UI reader. Fixed storage, bounded work, no locks or allocation.
++// Packed extrema preserve small transients without copying audio buffers to the UI.
++class PluginOutputScope {
++public:
++    using Columns = std::array<uint32_t, 64>;
++    static_assert(std::atomic<uint32_t>::is_always_lock_free, "Scope requires lock-free words");
++
++    void publish(const float* left, const float* right, unsigned frames) noexcept {
++        if (!left || !right) return;
++        auto at = head.load(std::memory_order_relaxed);
++        for (unsigned offset = 0; offset < frames; offset += 96) {
++            const auto count = std::min(96u, frames - offset);
++            l[at % 64].store(pack(left + offset, count), std::memory_order_relaxed);
++            r[at % 64].store(pack(right + offset, count), std::memory_order_relaxed);
++            ++at;
++        }
++        head.store(at, std::memory_order_release);
++    }
++    uint32_t read(Columns& left, Columns& right) const noexcept {
++        const auto at = head.load(std::memory_order_acquire);
++        for (unsigned i = 0; i < 64; ++i) {
++            left[i] = l[(at + i) % 64].load(std::memory_order_relaxed);
++            right[i] = r[(at + i) % 64].load(std::memory_order_relaxed);
++        }
++        return at;
++    }
++
++private:
++    static uint32_t pack(const float* samples, unsigned frames) noexcept {
++        float low = 0, high = 0;
++        for (unsigned i = 0; i < frames; ++i) {
++            const auto v = std::isfinite(samples[i]) ? std::clamp(samples[i], -1.f, 1.f) : 0.f;
++            low = std::min(low, v);
++            high = std::max(high, v);
++        }
++        return uint32_t(uint16_t(int16_t(low * 32767))) | (uint32_t(uint16_t(high * 32767)) << 16);
++    }
++    std::array<std::atomic<uint32_t>, 64> l {}, r {};
++    std::atomic<uint32_t> head {0};
++};
++} // namespace melodee
+--- a/src/melodee/plugin/plugin_panel.h
++++ b/src/melodee/plugin/plugin_panel.h
+@@ -43,6 +43,8 @@
+     // after), for the page's list; `window_first` the first one's place in the list of shown ones.
+     std::array<PluginPanelParam, 6> window {};
+     uint16_t window_first = 0;
++    std::array<uint32_t, 64> scope {}, scope_right {};
++    bool live_analyzer = false;
+ };
+
+ // A plug-in's programs as PRESETS lists them: the named ones, each with its
+--- a/src/melodee/plugin/plugin_rack.cpp
++++ b/src/melodee/plugin/plugin_rack.cpp
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: AGPL-3.0-only
+ // Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+ #include "melodee/plugin/plugin_rack.h"
++#include "melodee/plugin/output_scope.h"
+ #include "melodee/engine/dsp.h"
+ #include "melodee/engine/engine_host.h"
+ #include "melodee/plugin/clap_instance.h"
+@@ -326,6 +327,8 @@
+         }
+         const float* l = pointers[0];
+         const float* r = outs >= 2 ? pointers[1] : pointers[0];
++        if (!warming && analyzer_focus && analyzer_focus->load(std::memory_order_relaxed) == analyzer_entry)
++            output_scope.publish(l, r, frames);
+         idle.heard(l, r, frames);
+         auto safe = [](float x) { return std::isfinite(x) ? std::clamp(x, -8.0f, 8.0f) : 0.0f; };
+         if (add) for (unsigned f = 0; f < frames; ++f) { left[f] += safe(l[f]); right[f] += safe(r[f]); }
+@@ -338,6 +341,11 @@
+     const double plugin_rate;            // what the plug-in itself runs at (an Open MPC one: 44.1 kHz)
+     std::vector<int> shown;              // parameter indices the pages show, in order
+     bool qlinks = false;
++    PluginOutputScope output_scope;
++    std::shared_ptr<std::atomic<unsigned>> analyzer_focus;
++    unsigned analyzer_entry = max_plugins;
++    uint32_t scope_display_head = 0;
++    std::chrono::steady_clock::time_point scope_display_at {};
+     bool nam = false;                    // Neural Amp Modeler: shorter card names (plugin/nam.h)
+     std::atomic<bool> transport {true};  // TRANSPORT: it hears Play and Stop (off: always stopped), set by the rack
+     std::atomic<float> load {0};         // share of a block's time
+@@ -615,6 +623,7 @@
+ }
+
+ void PluginRack::panel(unsigned entry, unsigned row, PluginPanel& out) const {
++    analyzer_focus->store(entry, std::memory_order_relaxed);
+     out = {};
+     out.entry = uint8_t(entry);
+     if (entry >= max_plugins) return;
+@@ -632,6 +641,17 @@
+         return;
+     }
+     out.instrument = h->instrument;
++    out.live_analyzer = true;
++    const auto head = h->output_scope.read(out.scope, out.scope_right);
++    const auto now = std::chrono::steady_clock::now();
++    if (head != h->scope_display_head) {
++        h->scope_display_head = head;
++        h->scope_display_at = now;
++    }
++    if (h->asleep.load(std::memory_order_relaxed) || now - h->scope_display_at > std::chrono::milliseconds(150)) {
++        out.scope.fill(0);
++        out.scope_right.fill(0);
++    }
+     out.qlinks = h->qlinks;
+     out.rows = uint16_t((h->shown.size() + 2) / 3);
+     out.row = uint16_t(out.rows ? std::min<unsigned>(row, out.rows - 1u) : 0);
+@@ -1044,6 +1064,8 @@
+     bool is_instrument = described_instrument(description) || (instance->getTotalNumInputChannels() == 0 && instance->getTotalNumOutputChannels() > 0);
+
+     auto handle = std::make_unique<PluginHandle>(std::move(instance), is_instrument, device_rate, rate);
++    handle->analyzer_focus = analyzer_focus;
++    handle->analyzer_entry = job.entry;
+     handle->stage = stage.string();
+     handle->format = file.format;
+     handle->programs = named_programs(*handle->instance);
+--- a/src/melodee/plugin/plugin_rack.h
++++ b/src/melodee/plugin/plugin_rack.h
+@@ -81,6 +81,7 @@
+     // MIDI thread: the panel for `entry` with row `row` of its parameters on
+     // K1-K3; a parameter by its place among the shown ones, 0..plugin_param_max.
+     void panel(unsigned entry, unsigned row, PluginPanel& out) const;
++    void release_analyzer() noexcept { analyzer_focus->store(max_plugins, std::memory_order_relaxed); }
+     void set_param(unsigned entry, unsigned shown, int value);
+     // PRESETS: the plug-in's named programs, and one of them picked (by its
+     // number in the plug-in), switched to on the rack's thread. Picking the
+@@ -149,6 +150,8 @@
+     bool referenced(const Project& project, unsigned entry) const;
+
+     EngineHost& host;
++    std::shared_ptr<std::atomic<unsigned>> analyzer_focus =
++        std::make_shared<std::atomic<unsigned>>(max_plugins);
+     mutable std::mutex lock;                        // everything below but the thread
+     std::array<Entry, max_plugins> entries {};
+     std::vector<std::unique_ptr<PluginHandle>> handles; // live ones and those the audio thread still holds
+--- a/src/melodee/shell/plugin_jobs.cpp
++++ b/src/melodee/shell/plugin_jobs.cpp
+@@ -305,7 +305,7 @@
+         else if (ui.drum_voices.entry != no_plugin) ui.drum_voices = DrumVoices {};
+     }
+     int entry = plugin_in_focus();
+-    if (entry < 0) { ui.plugin_panel = PluginPanel {}; return; }
++    if (entry < 0) { plugins->release_analyzer(); ui.plugin_panel = PluginPanel {}; return; }
+     plugins->panel(unsigned(entry), ui.plugin_row[size_t(entry)], ui.plugin_panel);
+     ui.plugin_row[size_t(entry)] = ui.plugin_panel.row; // clamped to its rows
+ }
+--- /dev/null
++++ b/tests/plugin_output_scope.cpp
+@@ -0,0 +1,51 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++#include "melodee/plugin/output_scope.h"
++#include <cassert>
++#include <iostream>
++#include <limits>
++#include <thread>
++
++int main() {
++    using namespace melodee;
++    PluginOutputScope scope;
++    PluginOutputScope::Columns left {}, right {};
++    assert(scope.read(left, right) == 0);
++    for (auto v : left) assert(v == 0);
++    std::array<float, 256> l {}, r {};
++    for (unsigned i = 0; i < l.size(); ++i) {
++        l[i] = i % 2 ? -.5f : .5f;
++        r[i] = i % 2 ? -.25f : .25f;
++    }
++    const auto original_l = l, original_r = r;
++    for (int i = 0; i < 30; ++i) scope.publish(l.data(), r.data(), l.size());
++    assert(l == original_l && r == original_r); // the tap never modifies audio
++    const auto at = scope.read(left, right);
++    assert(at == 90);
++    for (unsigned i = 0; i < 64; ++i) {
++        assert((left[i] >> 16) == 16383);
++        assert((right[i] >> 16) == 8191);
++        assert(int16_t(left[i] & 65535) == -16383);
++    }
++    scope.publish(l.data(), r.data(), 0);
++    assert(scope.read(left, right) == at);
++    l.fill(0); r.fill(0);
++    for (int i = 0; i < 22; ++i) scope.publish(l.data(), r.data(), l.size());
++    scope.read(left, right);
++    for (unsigned i = 0; i < 64; ++i) assert(left[i] == 0 && right[i] == 0);
++    l[0] = std::numeric_limits<float>::quiet_NaN();
++    l[1] = std::numeric_limits<float>::infinity(); l[2] = -l[1];
++    l[3] = 3; l[4] = -3;
++    scope.publish(l.data(), r.data(), 24);
++    scope.read(left, right);
++    assert(left.back() >> 16 == 32767);
++    assert(int16_t(left.back() & 65535) == -32767);
++    // The UI may read during writes: all shared data are atomic packed words.
++    std::atomic<bool> done {false};
++    std::thread writer([&] {
++        for (int i = 0; i < 20000; ++i) scope.publish(r.data(), r.data(), r.size());
++        done.store(true);
++    });
++    while (!done.load()) scope.read(left, right);
++    writer.join();
++    std::cout << "PASS: stereo signal capture, audio unchanged, rolling window, silence, nonfinite/clipping safety, concurrent reader\n";
++}

@@ -1,0 +1,346 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+#include "melodee/ui/widgets.h"
+#include <algorithm>
+#include <cmath>
+
+namespace melodee::ui {
+
+float page_dots(Paint& p, float x, float cy, int count, int at, juce::Colour c, bool right) {
+    float total = 0;
+    for (int n = 0; n < count; ++n) total += (n == at ? 7 : 3) + (n ? 2.5f : 0);
+    float cursor = right ? x - total : x;
+    for (int n = 0; n < count; ++n) {
+        float w = n == at ? 7 : 3;
+        p.fill(cursor, cy - 1.5f, w, 3, n == at ? c : colour::line, 1.5f);
+        cursor += w + 2.5f;
+    }
+    return total;
+}
+
+void list_row(Paint& p, float x, float y, float w, const ListRow& row) {
+    if (row.current) {
+        p.fill(x, y, w, list_row_h, colour::raised, 4);
+        if (row.played >= 0) { // inside the row's rounded fill: the part heard, then its head
+            float to = w * std::clamp(row.played, 0.0f, 1.0f);
+            p.g.saveState();
+            p.g.reduceClipRegion(juce::Rectangle<int>(int(x), int(y), int(std::lround(to)), int(list_row_h)));
+            p.fill(x, y, w, list_row_h, row.accent.withAlpha(0.2f * std::clamp(row.played_wake, 0.0f, 1.0f)), 4);
+            p.g.restoreState();
+            if (row.played_head > 0)
+                p.fill(std::clamp(x + to - 1, x, x + w - 1.5f), y, 1.5f, list_row_h, colour::text.withAlpha(0.8f * std::min(1.0f, row.played_head)));
+        }
+        p.g.saveState();
+        p.g.reduceClipRegion(juce::Rectangle<int>(int(x), int(y), 3, int(list_row_h)));
+        p.fill(x, y, 8, list_row_h, row.accent, 4);
+        p.g.restoreState();
+    }
+    auto number = plain(colour::dim, type::small, Weight::Medium);
+    float nx = x + 9, nw = row.number.isEmpty() ? 0 : std::max(16.0f, p.width(row.number, number));
+    p.text(row.number, nx, y, nw, list_row_h, number);
+    float cy = y + list_row_h / 2, right = x + w - 7;
+    if (row.badge.isNotEmpty()) { // a track's number on its colour
+        auto style = plain(colour::bg, type::small, Weight::SemiBold);
+        float bw = std::max(15.0f, p.width(row.badge, style) + 8);
+        p.fill(right - bw, cy - 7.5f, bw, 15, row.dim ? row.accent.withAlpha(0.45f) : row.accent, 3);
+        p.text(row.badge, right - bw, cy - 7.5f, bw, 15, style, juce::Justification::centred);
+        right -= bw + 6;
+    }
+    if (row.starred) { star(p, right - 5.5f, cy, 5.5f, row.accent); right -= 19; }
+    if (row.chevron) { icon(p, Icon::ChevronRight, right - 10, cy - 5, 10, colour::dim, 1.6f); right -= 14; }
+    if (row.fact.isNotEmpty()) {
+        auto style = plain(row.dim ? colour::dim : row.current ? colour::sec : colour::mid, type::small, Weight::SemiBold);
+        float fw = p.width(row.fact, style);
+        p.text(row.fact, right - fw, y, fw + 1, list_row_h, style);
+        right -= fw + 6;
+    }
+    if (row.chip.isNotEmpty()) { // a word on a light chip
+        auto style = caps_text(colour::bg);
+        float cw = p.width(row.chip, style) + 10;
+        p.fill(right - cw, cy - 7.5f, cw, 15, colour::text, 3);
+        p.text(row.chip, right - cw, cy - 7.5f, cw, 15, style, juce::Justification::centred);
+        right -= cw + 6;
+    }
+    if (row.fact_icon != Icon::None) { icon(p, row.fact_icon, right - 12, cy - 6, 12, row.accent, 1.6f); right -= 18; }
+    if (row.pad.isNotEmpty()) { // the pad it is on: a raised chip with the pads glyph
+        auto style = caps_text(row.accent);
+        float cw = 4 + 10 + 3 + p.width(row.pad, style) + 5;
+        p.fill(right - cw, cy - 7.5f, cw, 15, colour::raised, 3);
+        icon(p, Icon::Pads, right - cw + 4, cy - 5, 10, row.accent, 1.5f);
+        p.text(row.pad, right - cw + 17, cy - 7.5f, cw - 17, 15, style);
+        right -= cw + 6;
+    }
+    if (row.tag_lead.isNotEmpty()) { // "1.2 / 3.1 s": the lead in the accent, the rest in mid
+        auto lead = plain(row.accent, type::small, Weight::SemiBold), rest = plain(colour::mid, type::small, Weight::SemiBold);
+        float lw = p.width(row.tag_lead, lead), tw = p.width(row.tag, rest);
+        p.text(row.tag, right - tw, y, tw + 1, list_row_h, rest);
+        p.text(row.tag_lead, right - tw - lw, y, lw + 1, list_row_h, lead);
+        right -= lw + tw + 8;
+    } else if (row.tag.isNotEmpty()) {
+        auto style = caps_text(row.accent);
+        float tw = p.width(row.tag, style);
+        p.text(row.tag, right - tw, y, tw + 1, list_row_h, style);
+        right -= tw + 8;
+    }
+    float name_x = nx + (nw > 0 ? nw + 6 : 0);
+    if (row.icon != Icon::None) {
+        icon(p, row.icon, name_x, cy - 6, 12, row.current ? row.accent : row.dim ? colour::dim : colour::mid, 1.4f);
+        name_x += 18;
+    }
+    auto name = plain(row.current ? colour::text : row.dim ? colour::dim : colour::sec, type::list, row.current ? Weight::Medium : Weight::Regular);
+    float available = right - name_x;
+    if (!row.fixed_name) {
+        p.text(row.name, name_x, y, available, list_row_h, p.fit(row.name, name, available, type::floor));
+    } else if (available > 0) {
+        const float width = p.width(row.name, name) + 3;
+        const float overflow = std::max(0.f, width - available);
+        const float travel = overflow / .04f;
+        const float cycle = 1800 + 2 * travel;
+        const float elapsed = std::fmod(float(row.name_age_ms), cycle);
+        const float offset = !row.current ? 0 : std::min(
+            std::clamp((elapsed - 700) * .04f, 0.f, overflow),
+            std::clamp((cycle - elapsed - 250) * .04f, 0.f, overflow));
+        p.g.saveState();
+        p.g.reduceClipRegion(juce::Rectangle<int>(int(name_x), int(y), int(available), int(list_row_h)));
+        p.text(row.name, name_x - offset, y, width, list_row_h, name);
+        p.g.restoreState();
+    }
+}
+
+void gauge(Paint& p, float x, float y, float w, float fill, juce::Colour c, float thickness) {
+    p.fill(x, y, w, thickness, colour::line, thickness / 2);
+    fill = std::clamp(fill, 0.0f, 1.0f);
+    if (fill > 0) p.fill(x, y, w * fill, thickness, c, thickness / 2);
+}
+
+void sheet(Paint& p, const Sheet& s) {
+    // A card 260 wide, centred over the picture, the body wrapping to three lines.
+    constexpr float w = 260, x = (zone::width - w) / 2, pad = 12;
+    auto body = plain(colour::sec, type::body);
+    auto title = plain(colour::text, type::title, Weight::SemiBold);
+    float line = body.size * 1.25f, text_w = w - 2 * pad;
+    // The body wraps at the card's width, never cut: past three lines the
+    // audit hears of it.
+    auto body_font = font(body.size, body.weight);
+    juce::GlyphArrangement wrapped;
+    wrapped.addJustifiedText(body_font, s.body, 0, body_font.getAscent(), text_w, juce::Justification::topLeft,
+                             line - body_font.getHeight());
+    float body_h = wrapped.getNumGlyphs() > 0 ? wrapped.getBoundingBox(0, -1, true).getBottom() : 0;
+    int lines = int(std::ceil((body_h - 1) / line));
+    if (lines > 3) report_text_issue({s.body, body.size, body_h, 3 * line});
+    float h = pad + (s.power_icon ? 22 : 0) + 24 + lines * line + pad;
+    float y = std::max(float(zone::header_y), zone::picture_y + (zone::picture_h - h) / 2);
+    for (int n = 1; n <= 4; ++n) p.fill(x - n, y + n * 2, w + 2 * n, h, juce::Colours::black.withAlpha(0.06f), 6 + n); // a soft shadow
+    p.fill(x, y, w, h, colour::surf, 6);
+    p.ring(x, y, w, h, colour::line, 6);
+    float at = y + pad;
+    if (s.power_icon) {
+        juce::Path icon;
+        float cx = x + pad + 8.5f, cy = at + 8.5f;
+        icon.addCentredArc(cx, cy, 6.25f, 6.25f, 0, juce::MathConstants<float>::pi * 0.25f,
+                           juce::MathConstants<float>::pi * 1.75f, true);
+        icon.startNewSubPath(cx, cy - 7.5f); icon.lineTo(cx, cy - 1.5f);
+        p.g.setColour(colour::text);
+        p.g.strokePath(icon, juce::PathStrokeType(1.1f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        at += 22;
+    }
+    p.text(s.title, x + pad, at, text_w, 22, p.fit(s.title, title, text_w, type::body));
+    at += 24;
+    p.g.setColour(body.colour);
+    wrapped.draw(p.g, juce::AffineTransform::translation(x + pad, at));
+}
+
+void wide_sheet(Paint& p, const MenuSheet& m, const juce::String& chip_text, juce::Colour chip_colour) {
+    constexpr float x = zone::pad, y = zone::header_y + 2, w = zone::width - 2 * zone::pad, h = zone::knobs_y - 2 - y;
+    for (int n = 1; n <= 4; ++n) p.fill(x - n, y + n * 2, w + 2 * n, h, juce::Colours::black.withAlpha(0.06f), 6 + n);
+    p.fill(x, y, w, h, colour::surf, 6);
+    p.ring(x, y, w, h, colour::line, 6);
+    auto chip = caps_text(colour::bg);
+    float cw = p.width(chip_text, chip) + 10;
+    p.fill(x + 10, y + 8, cw, 15, chip_colour, 3);
+    p.text(chip_text, x + 10, y + 8, cw, 15, chip, juce::Justification::centred);
+    auto title = plain(colour::text, type::body, Weight::SemiBold), detail = caps_text(m.detail_colour);
+    float tx = x + 10 + cw + 6, dw = m.detail.isEmpty() ? 0 : p.width(m.detail, detail);
+    float tw = p.text(m.title, tx, y + 7, x + w - 10 - tx - (dw > 0 ? dw + 6 : 0), 17, title);
+    if (dw > 0) p.text(m.detail, tx + tw + 6, y + 7, dw + 1, 17, detail);
+    float column = (w - 14) / 2, row_h = 30;
+    for (unsigned n = 0; n < m.count; ++n) {
+        const auto& r = m.rows[n];
+        float rx = x + 7 + (n / 4) * column, ry = y + 29 + (n % 4) * row_h;
+        bool current = n == m.current;
+        if (current) {
+            p.fill(rx, ry, column - 6, row_h - 3, colour::raised, 4);
+            p.fill(rx + 6, ry + 7, 2, row_h - 17, m.accent, 1);
+        }
+        auto colour = r.off ? colour::dim : r.danger ? colour::rec : current ? colour::text : colour::sec;
+        auto name = plain(colour, type::body, Weight::Medium), value = plain(colour::mid, type::body);
+        float vw = r.value.isEmpty() ? 0 : p.width(r.value, value);
+        float nw = column - 26 - (vw > 0 ? vw + 6 : 0);
+        p.text(r.name, rx + 14, ry, nw, row_h - 3, p.fit(r.name, name, nw, type::floor));
+        if (vw > 0) p.text(r.value, rx + column - 12 - vw, ry, vw + 1, row_h - 3, value);
+    }
+}
+
+void star(Paint& p, float cx, float cy, float r, juce::Colour c) {
+    juce::Path path;
+    path.addStar({cx, cy}, 5, r * 0.45f, r, 0);
+    p.g.setColour(c); p.g.fillPath(path);
+}
+
+void key_tiles(Paint& p, const std::array<KeyTile, 3>& tiles, float y, float h) {
+    float column = zone::width / 3.0f;
+    for (size_t n = 0; n < tiles.size(); ++n) {
+        const auto& t = tiles[n];
+        if (t.icon == Icon::None) continue;
+        float x = n * column + 6, w = column - 12, cx = x + w / 2;
+        auto ground = t.primary && !t.off ? colour::raised : colour::panel;
+        auto ink = t.off ? colour::dim : t.danger ? colour::rec : t.primary ? t.colour : colour::mid;
+        auto sub_ink = t.off ? colour::dim : colour::mid;
+        p.fill(x, y, w, h, ground, 6);
+        juce::Path caret; // up to its key, in the tile's own ground
+        caret.addTriangle(cx - 5, y + 0.5f, cx, y - 5, cx + 5, y + 0.5f);
+        p.g.setColour(ground); p.g.fillPath(caret);
+        icon(p, t.icon, cx - 13, y + 26, 26, ink, 1.4f);
+        if (t.big.isNotEmpty()) {
+            auto big = plain(ink, type::value, Weight::SemiBold);
+            p.text(t.big, x + 4, y + 62, w - 8, 26, p.fit(t.big, big, w - 8, type::list), juce::Justification::centred);
+            if (t.sub.isNotEmpty()) p.text(t.sub, x + 4, y + 90, w - 8, 14, p.fit(t.sub, caps_text(sub_ink), w - 8, type::floor), juce::Justification::centred);
+        } else {
+            auto word = caps_text(ink, type::body);
+            float wy = t.sub.isNotEmpty() ? y + 68 : y + 74;
+            p.text(t.word, x + 4, wy, w - 8, 18, p.fit(t.word, word, w - 8, type::floor), juce::Justification::centred);
+            if (t.sub.isNotEmpty()) p.text(t.sub, x + 4, wy + 20, w - 8, 14, p.fit(t.sub, caps_text(sub_ink), w - 8, type::floor), juce::Justification::centred);
+        }
+    }
+}
+
+void carousel(Paint& p, const std::vector<CarouselCard>& cards, float position, juce::Colour accent, float y, float h) {
+    if (cards.empty()) return;
+    const float last = float(cards.size() - 1);
+    constexpr float dots_h = 14, gap = 8, mid_w = 148, side_w = 116;
+    const float card_h = h - dots_h, side_h = card_h * 0.84f, step = mid_w / 2 + gap + side_w / 2, centre = zone::width / 2.0f;
+    // Each card by how far it sits from the middle (`position` runs between cards while the wheel's move eases in):
+    // the nearer, the bigger and brighter; two away and more, gone.
+    auto draw = [&](unsigned n) {
+        float off = float(n) - position, d = std::abs(off);
+        if (d >= 2.6f) return;
+        float lit = std::clamp(1 - d, 0.0f, 1.0f), fade = std::clamp((2.6f - d) / 0.8f, 0.0f, 1.0f);
+        auto mix = [&](juce::Colour side, juce::Colour mid) { return side.interpolatedWith(mid, lit).withMultipliedAlpha(fade); };
+        float sign = off < 0 ? -1.0f : 1.0f, cx = centre + sign * (d <= 1 ? d * step : step + (d - 1) * (side_w + gap));
+        float w = side_w + (mid_w - side_w) * lit, ch = side_h + (card_h - side_h) * lit, x = cx - w / 2, cy = y + (card_h - ch) / 2;
+        const auto& it = cards[n];
+        p.fill(x, cy, w, ch, mix(colour::panel, colour::raised), 8);
+        if (lit > 0.01f) p.ring(x, cy, w, ch, accent.withAlpha(lit * fade), 8, 1.4f);
+        float s = 24 + 6 * lit, top = cy + 12 + 2 * lit;
+        if (it.kind.isNotEmpty()) p.text(it.kind, x + 4, top, w - 8, 13, caps_text(mix(colour::dim, colour::sec)), juce::Justification::centred);
+        icon(p, it.icon, cx - s / 2, top + 22, s, mix(colour::mid, accent), 1.5f);
+        auto word = plain(mix(colour::mid, colour::text), type::list + (type::title - type::list) * lit, Weight::SemiBold);
+        float wy = top + 22 + s + 10;
+        p.text(it.word, x + 6, wy, w - 12, 24, p.fit(it.word, word, w - 12, type::body), juce::Justification::centred);
+        if (it.sub.isNotEmpty()) {
+            auto sub = caps_text(mix(colour::dim, colour::sec));
+            p.text(it.sub, x + 6, wy + 26, w - 12, 14, p.fit(it.sub, sub, w - 12, type::floor), juce::Justification::centred);
+        }
+    };
+    std::vector<unsigned> order(cards.size()); // the far ones first, under the near ones
+    for (unsigned n = 0; n < order.size(); ++n) order[n] = n;
+    std::sort(order.begin(), order.end(), [&](unsigned a, unsigned b) { return std::abs(float(a) - position) > std::abs(float(b) - position); });
+    for (unsigned n : order) draw(n);
+    // A dot a card, the one in the middle drawn out into a bar.
+    constexpr float dot = 5, room = 4, stretch = 8;
+    float total = float(cards.size()) * (dot + room) - room + stretch, dx = centre - total / 2, dy = y + h - dots_h / 2 - dot / 2 + 2;
+    float at = std::clamp(position, 0.0f, last);
+    for (unsigned n = 0; n < cards.size(); ++n) {
+        float lit = std::clamp(1 - std::abs(float(n) - at), 0.0f, 1.0f), w = dot + stretch * lit;
+        p.fill(dx, dy, w, dot, colour::line.interpolatedWith(accent, lit), dot / 2);
+        dx += w + room;
+    }
+}
+
+void card_sheet(Paint& p, const CardSheet& m) {
+    // The page behind goes: the header becomes the sheet's, the picture and knob zones its cards.
+    p.fill(0, zone::header_y, zone::width, zone::height - zone::header_y, colour::bg);
+    float x = zone::pad, mid_y = zone::header_y + zone::header_h / 2.0f;
+    if (m.chip.isNotEmpty()) {
+        auto chip = caps_text(colour::bg);
+        float cw = p.width(m.chip, chip) + 10;
+        p.fill(x, mid_y - 7.5f, cw, 15, m.chip_colour, 3);
+        p.text(m.chip, x, mid_y - 7.5f, cw, 15, chip, juce::Justification::centred);
+        x += cw + 6;
+    }
+    auto detail = caps_text(m.detail_colour);
+    float dw = m.detail.isEmpty() ? 0 : p.width(m.detail, detail);
+    float room = zone::width - zone::pad - x - (dw > 0 ? dw + 6 : 0);
+    float tw = p.text(m.title, x, zone::header_y, room, zone::header_h, p.fit(m.title, plain(colour::text, type::body, Weight::SemiBold), room, type::floor));
+    if (dw > 0) p.text(m.detail, x + tw + 6, zone::header_y, dw + 1, zone::header_h, detail);
+
+    constexpr float gap = 6, top_y = zone::picture_y + 4, card_h = 58, card_w = (zone::width - 2 * zone::pad - gap) / 2;
+    unsigned rows = (m.count + 1) / 2, first = card_sheet_top(m.current, m.count);
+    for (unsigned r = 0; r < card_sheet_rows && first + r < rows; ++r)
+        for (unsigned c = 0; c < 2; ++c) {
+            unsigned n = (first + r) * 2 + c;
+            if (n >= m.count) break;
+            const auto& it = m.items[n];
+            bool lit = n == m.current;
+            float cx = zone::pad + c * (card_w + gap), cy = top_y + r * (card_h + gap);
+            p.fill(cx, cy, card_w, card_h, lit ? colour::raised : colour::panel, 6);
+            if (lit) p.ring(cx, cy, card_w, card_h, it.danger ? colour::rec : m.accent, 6, 1.2f);
+            auto ink = it.off ? colour::dim : it.danger ? colour::rec : lit ? colour::text : colour::mid;
+            icon(p, it.icon, cx + 10, cy + card_h / 2 - 10, 20, ink, 1.4f);
+            float tx = cx + 38, tw2 = card_w - 38 - 8;
+            auto word = caps_text(ink, type::body);
+            auto lines = p.wrap(it.word, word, tw2, 2);
+            auto sub = caps_text(it.off ? colour::dim : it.danger && lit ? colour::rec : it.on ? m.accent : lit ? colour::sec : colour::mid);
+            // The line under the word: over two lines where it is too long for one and the word left room (the
+            // MENU's shortcuts, "PAD BANK + ERASE + PAD").
+            juce::StringArray subs;
+            if (it.sub.isNotEmpty()) subs = lines.size() == 1 && p.width(it.sub, sub) > tw2 ? p.wrap(it.sub, sub, tw2, 2) : juce::StringArray {it.sub};
+            float line_h = word.size + 3, block = lines.size() * line_h + (subs.isEmpty() ? 0 : 2 + 13 * subs.size());
+            float ty = cy + (card_h - block) / 2;
+            for (const auto& line : lines) { p.text(line, tx, ty, tw2, line_h, word); ty += line_h; }
+            ty += 2;
+            for (const auto& line : subs) { p.text(line, tx, ty, tw2, 13, p.fit(line, sub, tw2, type::floor)); ty += 13; }
+        }
+    if (rows > card_sheet_rows) { // where the rows in view sit among all of them
+        float bar_y = top_y, bar_h = card_sheet_rows * (card_h + gap) - gap;
+        p.fill(zone::width - 3, bar_y, 2, bar_h, colour::line, 1);
+        p.fill(zone::width - 3, bar_y + bar_h * first / rows, 2, bar_h * card_sheet_rows / rows, colour::mid, 1);
+    }
+}
+
+void confirm_sheet(Paint& p, const ConfirmSheet& s) {
+    bool foot = s.chip.isNotEmpty() || s.name.isNotEmpty() || s.undo;
+    constexpr float w = 272, x = (zone::width - w) / 2, y = zone::picture_y + (zone::picture_h - 116) / 2; // the top stays put
+    float h = foot ? 116 : s.lines[1].isEmpty() ? 70 : 86;
+    for (int k = 1; k <= 3; ++k) p.fill(x - k, y + k * 2, w + 2 * k, h, juce::Colours::black.withAlpha(0.06f), 7 + k);
+    p.fill(x, y, w, h, colour::panel, 6);
+    p.ring(x, y, w, h, s.accent, 6, 1.2f);
+    icon(p, s.icon, x + 14, y + 12, 20, s.accent, 1.6f);
+    auto title = plain(colour::text, type::list, Weight::SemiBold);
+    p.text(s.title, x + 44, y + 12, w - 58, 20, p.fit(s.title, title, w - 58, type::floor));
+    auto line = plain(colour::sec, type::small, Weight::Regular);
+    for (size_t n = 0; n < s.lines.size(); ++n)
+        if (s.lines[n].isNotEmpty()) p.text(s.lines[n], x + 16, y + 44 + n * 16, w - 32, 14, p.fit(s.lines[n], line, w - 32, type::floor));
+    // The foot: what it is about, and the keys that bring it back.
+    float by = y + h - 26, at = x + 16;
+    if (s.chip.isNotEmpty()) {
+        auto style = caps_text(colour::bg);
+        float cw = p.width(s.chip, style) + 10;
+        p.fill(at, by, cw, 15, s.chip_colour, 3);
+        p.text(s.chip, at, by, cw, 15, style, juce::Justification::centred);
+        at += cw + 8;
+    }
+    if (s.name.isNotEmpty()) p.text(s.name, at, by, x + w - 90 - at, 15, p.fit(s.name, caps_text(colour::sec), x + w - 90 - at, type::floor));
+    if (s.undo) { // Shift, Minus, then the undo glyph
+        float ux = x + w - 16 - 14;
+        icon(p, Icon::Undo, ux, by + 1, 13, colour::mid, 1.5f);
+        ux -= 21;
+        p.fill(ux, by - 1, 17, 17, colour::raised, 3);
+        icon(p, Icon::Minus, ux + 3.5f, by + 2.5f, 10, colour::sec, 1.8f);
+        ux -= 21;
+        p.fill(ux, by - 1, 17, 17, colour::raised, 3);
+        icon(p, Icon::Shift, ux + 3.5f, by + 2.5f, 10, colour::sec, 1.4f);
+    }
+}
+
+} // namespace melodee::ui

@@ -1,0 +1,393 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+// ROLL (B2 on a sequence page, or Seq held + B2): a piano roll of the
+// selected track's pattern, read from its events (shell/roll.h); on a kit a
+// lane per pad, numbered as the pads are (the kit's bank in view). Each
+// note sits at its own tick for its own length, over bar lines, any number
+// to a step. The cursor is a step of Q (the wheel: through each chord's
+// notes, then the next step) and a pitch (Minus / Plus: the chord in the step, then a semitone);
+// the note there is in focus, drawn white, and the cards edit it (K1 length,
+// K2 velocity, K3 chance; B2 again the TRIG row: K1 a ratchet's hits, drawn
+// along the note, K2 their velocity ramp, Shift + K2 a kit pad's pitch ramp).
+// The view scrolls with the cursor a step at a time;
+// dots on the top and bottom edges mark notes above and below it. Pads write
+// their note at the cursor, NEW NOTE long, or focus it; Pad Bank moves their
+// octave (Shift: down). Erase tapped alone deletes the note in focus. Push
+// opens its sheet: Accent, Slide, Tie and Delete as cards, Accent lit. The
+// wheel moves, Push does the card (the three switches stay open to see them
+// change), B1 back; a pad or a pot closes it. With Seq Record on while
+// playing, pads play in live.
+// Shift + wheel marks notes one by one along the wheel's walk (drawn with a
+// white outline). Shift let go, the marked notes take the controls: the wheel
+// moves them a step of Q, Shift + wheel a row, Erase deletes, Mute mutes
+// (drawn hollow; again plays them), Note Repeat steps their ratchet, K1 and
+// K3 set all of them, K2 moves their velocities together; a Shift tap clears
+// the marks.
+#include "melodee/engine/engine_host.h"
+#include "melodee/model/scales.h"
+#include "melodee/pages/common.h"
+#include "melodee/pages/pages.h"
+#include "melodee/shell/ask.h"
+#include "melodee/shell/roll_tools.h"
+#include "melodee/shell/harmony_tool.h"
+#include "melodee/shell/bar_tool.h"
+#include "melodee/pages/harmony_view.h"
+#include "melodee/pages/drum_view.h"
+#include "melodee/shell/sample_library.h"
+#include "melodee/shell/note_jobs.h"
+#include "melodee/shell/roll.h"
+#include "melodee/shell/step_edit.h"
+#include "melodee/shell/step_lane.h"
+#include "melodee/ui/widgets.h"
+#include "melodee/ui/knobs.h"
+#include <algorithm>
+
+namespace melodee {
+namespace {
+using namespace ui;
+constexpr float gutter = 23, ruler = 13, row_h = 10.5f, column = 18.5f;
+constexpr unsigned rows = roll_rows, columns = roll_columns;
+enum SheetRow : uint8_t { RowAccent, RowSlide, RowTie, RowDelete, RowSelectAll, RowSplit, RowImportMidi, RowHarmony, RowAgain, RowFromRoll, RowDrums, RowBar, RowOctave, sheet_rows };
+
+void open_midi_import(Context& c) {
+    if (!c.track().used()) { c.notice("MIDI import: pick a track with a sound"); return; }
+    if (c.ui.recording || c.ui.rendering) { c.notice("Stop recording or rendering before MIDI import"); return; }
+    if (!c.library) { c.notice("MIDI import: no card"); return; }
+    c.ui.sheet_open = false;
+    c.stop_preview();
+    c.library->preview("");
+    c.open(PageId::Samples);
+    c.ui.midi_import = true;
+    c.ui.files_cursor = 0;
+    c.ui.files_count = uint16_t(std::min<size_t>(c.library->files(true).size(), 0xffff));
+    c.library->rescan();
+    c.preview_cursor();
+}
+
+bool black(int key) { return (0x54A >> (key % 12)) & 1; } // C#, D#, F#, G#, A#
+
+juce::String where(const Snapshot& s, uint32_t tick) {
+    return juce::String(roll_position(tick, s.project.bar_ticks(), s.project.beat_ticks(), s.pattern.q()));
+}
+
+void draw(Paint& p, const Snapshot& s) {
+    if(s.ui.drums.open){draw_drums(p,s);return;}
+    if(s.ui.bar_edit.page){bar_draw(p,s);return;}
+    if(s.ui.harmony.open){draw_harmony(p,s);return;}
+    const auto& pattern = s.pattern;
+    UiState ui = s.ui;
+    roll_follow(pattern, ui);
+    auto c = colour_of(s);
+    unsigned q = pattern.q(), cursor = roll_cursor(pattern, ui), first = roll_first(pattern, ui);
+    unsigned bar = s.project.bar_ticks(), beat = s.project.beat_ticks();
+    if (ui.roll_tools.zoom || ui.roll_tools.fine) {
+        q = roll_view_grid(pattern.q(), ui.roll_tools.zoom);
+        const int selected = roll_focus(pattern, ui, roll_lane(s.track()));
+        const uint32_t tick = ui.roll_tools.fine ? ui.roll_tools.cursor :
+                              selected >= 0 ? pattern.events[unsigned(selected)].tick : cursor * pattern.q();
+        cursor = tick / q;
+        const unsigned span = columns * q;
+        const unsigned last = pattern.length > span ? (pattern.length - span + q - 1) / q : 0;
+        first = std::min(cursor > columns / 2 ? cursor - columns / 2 : 0, last);
+    }
+    uint32_t from = first * q, to = (first + columns) * q;
+    const auto& track = s.track();
+    const int lane = roll_lane(track); // 16 Levels on a kit: a row a pitch of its pad, as a synth's
+    const int named_by = lane >= 0 ? levels_root_shift(s.project, track) : 0; // its rows named from its sample's note
+    int focus = ui.roll_tools.fine ? roll_split_note(pattern, ui.roll_tools.note) : roll_focus(pattern, ui, lane);
+    int top_key = ui.roll_top;
+    const Event* focused = focus >= 0 ? &pattern.events[size_t(focus)] : nullptr;
+
+    const bool marks = roll_selection(ui, track.pattern); // Shift + wheel's marks (shell/roll.h)
+    bool kit = lane < 0 && (track.engine == EngineKind::Sampler || drum_pads(track)); // lanes of pads, not keys (Drums pads too: 36 is A01)
+    Header h = header_of(s);
+    h.left.push_back(edit_pattern_chip(s));
+    if (!ui.recording) {
+        if (focused && ui.held_note >= 0) h.left.push_back(pill("LOCK", c)); // its pad held: the pots lock it (roadmap P1)
+        if (focused) // where it sits: the place bar's; a slice hit's slice after its pad (issue 24)
+            h.left.push_back(chip(Icon::Note, juce::String(lane >= 0 ? note_name(roll_row(*focused, lane) + named_by) : key_label(track, focused->key)) +
+                                                  (focused->slice ? juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(int(focused->slice)) : juce::String()), c));
+        else h.left.push_back(pill("BAR " + juce::String(cursor * q / bar + 1) + " / " + juce::String((pattern.length + bar - 1) / bar)));
+    }
+    if (marks) { // how many are marked; grey while Shift still marks
+        unsigned n = unsigned(roll_marked_events(pattern, ui).size());
+        if (n) h.left.push_back(ui.roll_marking ? pill(juce::String(n) + " SEL") : pill(juce::String(n) + " SEL", c));
+    }
+    if (ui.edit_loop && ui.edit_loop_track == ui.track) h.left.push_back(pill("LOOP", c)); // Loop: the bars in view play over and over
+    if (ui.copying == UiState::Copying::Notes) h.left.push_back(pill("COPY", c));          // Push pastes the marked notes
+    h.right.push_back(tag_of(s, ui.track));
+    bool sheet = ui.sheet_open;
+    SoftKeys keys {{"SEQUENCES", "ROLL", motion_key(s)}, 1, c};
+    keys.dots[1] = 2; keys.dot_at[1] = ui.trig_cards ? 1 : 0; // ROLL again: the TRIG row of cards
+    if (ui.shift) keys.labels[2] = track.used() ? "IMPORT MIDI" : "";
+    if (sheet) keys = SoftKeys {{"BACK", "", ""}, -1, c, {KeyIcon::Back, KeyIcon::None, KeyIcon::None}}; // the cards: wheel and Push
+    if (ui.roll_tools.fine) {
+        keys = SoftKeys {{"SPLIT", "DONE", ""}, 1, c};
+        h.right.clear();
+        h.right.push_back(pill("+" + juce::String(ui.roll_tools.cursor - ui.roll_tools.note.tick) + " ticks", c));
+    }
+    frame(p, s, keys, h);
+
+    float top = zone::picture_y + ruler, height = rows * row_h, right = gutter + columns * column;
+    auto x_of = [&](uint32_t tick) { return gutter + (float(tick) - float(from)) / float(q) * column; };
+    // The ruler: bar.beat over each beat, where there is room for it.
+    float last_label = -100;
+    for (unsigned k = 0; k < columns; ++k) {
+        uint32_t tick = (first + k) * q;
+        if (tick % beat || gutter + k * column < last_label + 34) continue;
+        last_label = gutter + k * column;
+        p.text(juce::String(tick / bar + 1) + "." + juce::String(tick % bar / beat + 1), last_label + 2, zone::picture_y, 32, 13,
+               plain(colour::mid, type::small, Weight::SemiBold));
+    }
+    for (unsigned r = 0; r < rows; ++r) {
+        int key = top_key - int(r);
+        bool shade = kit ? (key - int(sampler_first_note)) / 4 % 2 != 0 : key + named_by >= 0 && black(key + named_by); // a kit: pads in fours
+        p.fill(0, top + r * row_h, zone::width, row_h - 0.5f, shade ? colour::quiet : colour::panel);
+    }
+    if (kit) { // the pads' numbers in their bank, every other lane so each has room, the cursor's always
+        for (unsigned r = 0; r < rows; ++r) {
+            int key = top_key - int(r), pad = key - int(sampler_first_note);
+            if (pad < 0 || (key - int(ui.roll_key)) % 2) continue;
+            p.text(juce::String(pad % 16 + 1), 0, top + r * row_h - 2, gutter - 4, row_h + 3,
+                   plain(key == int(ui.roll_key) ? c : colour::dim, type::small, Weight::SemiBold), juce::Justification::centredRight);
+        }
+    }
+    // Names on C, F, G and A and the root: never two side by side, so each has room at the floor size.
+    int root = int(s.project.root % 12);
+    for (unsigned r = 0; r < rows && !kit; ++r) {
+        int key = top_key - int(r) + named_by;
+        if (key < 0) break;
+        int pitch = key % 12;
+        bool named = pitch == root || ((pitch == 0 || pitch == 5 || pitch == 7 || pitch == 9) && std::abs(pitch - root) > 1 && std::abs(pitch - root) < 11);
+        if (black(key) || !named) continue;
+        p.text(note_name(key), 0, top + r * row_h - 2, gutter - 4, row_h + 3, plain(pitch == root ? c : colour::dim, type::small, Weight::SemiBold),
+               juce::Justification::centredRight);
+    }
+    p.fill(gutter - 1, top, 1, height, colour::line);
+    for (unsigned k = 1; k < columns; ++k) {
+        uint32_t tick = (first + k) * q;
+        bool on_bar = tick % bar == 0, on_beat = tick % beat == 0;
+        p.fill(gutter + k * column, top, on_beat ? 1 : 0.5f, height, on_bar ? colour::mid.withAlpha(0.45f) : on_beat ? colour::line : colour::bg);
+    }
+    // The cursor: its step's column and its pitch's row.
+    if (cursor >= first && cursor < first + columns) p.fill(gutter + (cursor - first) * column, top, column, height, c.withAlpha(0.12f));
+    int cursor_row = top_key - int(ui.roll_key);
+    if (cursor_row >= 0 && cursor_row < int(rows)) p.fill(gutter, top + cursor_row * row_h, right - gutter, row_h - 0.5f, c.withAlpha(0.09f));
+    // The notes, each at its own tick and for its own length; those above or below the rows are dots on the edge.
+    std::array<uint8_t, columns> above {}, below {};
+    for (size_t n = 0; n < pattern.events.size(); ++n) {
+        const auto& e = pattern.events[n];
+        if (e.tick >= pattern.length) break;
+        uint32_t end = std::min<uint32_t>(e.tick + e.length, pattern.length);
+        if (end <= from || e.tick >= to) continue;
+        int row = roll_row(e, lane);
+        if (row < 0) continue; // another pad's, under 16 Levels
+        int r = top_key - row;
+        if (r < 0 || r >= int(rows)) {
+            if (e.tick >= from) (r < 0 ? above : below)[std::min<unsigned>((e.tick - from) / q, columns - 1)] = 1;
+            continue;
+        }
+        float x = std::max(x_of(e.tick), gutter) + 1, xe = std::min(x_of(end), right + 1), y = top + r * row_h + 1;
+        float w = std::max(xe - x - 1, 2.0f), hgt = row_h - 2.5f;
+        bool on = int(n) == focus, muted = e.flags & step_mute, marked = marks && roll_is_marked(pattern, ui, n);
+        unsigned hits = e.hits();
+        if (muted) { // kept, not played: hollow
+            p.ring(x, y, w, hgt, on ? colour::text : c.withAlpha(0.6f), 2.5f, 1.0f);
+        } else if (hits == 1) {
+            p.fill(x, y, w, hgt, on ? colour::text : c.withAlpha(0.4f + e.velocity / 127.0f * 0.6f), 2.5f);
+        } else { // a ratchet: its hits along the note, each as strong as it plays (the ramp)
+            float each = float(e.length) / float(hits) / float(q) * column;
+            for (unsigned k = 0; k < hits; ++k) {
+                float hx = x_of(e.tick) + 1 + k * each, hxe = std::min(hx + std::max(each - 1.0f, 1.0f), right + 1);
+                if (hxe <= gutter || hx >= right + 1) continue;
+                hx = std::max(hx, gutter + 1);
+                float v = e.hit_velocity(e.velocity, k) / 127.0f;
+                p.fill(hx, y, std::max(hxe - hx, 1.0f), hgt, on ? colour::text : c.withAlpha(0.4f + v * 0.6f), 1.5f);
+            }
+        }
+        if (on) p.ring(x - 1, y - 1, w + 2, hgt + 2, c, 3, 1.2f);
+        else if (marked) p.ring(x - 1, y - 1, w + 2, hgt + 2, colour::text, 3, 1.2f);
+        bool kit_lane = track.engine == EngineKind::Sampler;
+        if (w > 6 && lock_in(pattern, e.tick, e.tick + 1, kit_lane ? int(e.key) - int(sampler_first_note) : -1)) // a Motion lock on it
+            p.fill(x + 1, y + 1, 3, 3, on ? c : colour::bg, 0.5f);
+        if (e.condition != trig_always && w > 8) // a trig condition: a ring at its end
+            p.ring(x + w - 6, y + hgt / 2 - 2.5f, 5, 5, on ? c : colour::bg, 2.5f, 1.2f);
+        if ((e.flags & step_accent) && w > 6) p.fill(x + 1.5f, y + 1.5f, 2, hgt - 3, on ? c : colour::bg, 1);
+    }
+    for (unsigned k = 0; k < columns; ++k) {
+        float cx = gutter + k * column + column / 2;
+        if (above[k]) p.circle(cx, top + 2, 1.8f, colour::mid);
+        if (below[k]) p.circle(cx, top + height - 2.5f, 1.8f, colour::mid);
+    }
+    if (s.playing && pattern.length) {
+        uint32_t at = uint32_t(s.position % pattern.length);
+        if (at >= from && at < to) p.fill(x_of(at), top - 3, 1, height + 3, colour::text);
+    }
+    if (ui.roll_tools.fine && ui.roll_tools.cursor >= from && ui.roll_tools.cursor < to)
+        p.fill(x_of(ui.roll_tools.cursor), top - 3, 1.3f, height + 3, juce::Colour(0xffffc46b));
+    // Where the view sits: the whole pattern along the bottom with its notes, pitch along the right edge.
+    float tw = zone::width - gutter - 3, by = top + height + 3.5f;
+    p.fill(gutter, by, tw, 2, colour::line, 1);
+    for (const auto& e : pattern.events) {
+        if (e.tick >= pattern.length) break;
+        if (roll_row(e, lane) < 0) continue;
+        p.fill(gutter + tw * float(e.tick) / float(pattern.length), by, 1, 2, colour::dim);
+    }
+    float steps = float(std::max(1u, (pattern.length + q - 1) / q));
+    p.fill(gutter + tw * first / steps, by, tw * std::min<float>(columns, steps) / steps, 2, colour::mid.withAlpha(0.7f), 1);
+    float place = std::clamp((top_key - 12) / 115.0f, 0.0f, 1.0f);
+    p.fill(zone::width - 3, top, 2, height, colour::line, 1);
+    p.fill(zone::width - 3, top + height * (1 - place) * 0.74f, 2, height * 0.26f, colour::mid, 1);
+
+    if (sheet) { // the note's jobs as cards: the wheel moves, Push does it (Accent first)
+        CardSheet m;
+        m.chip = "NOTE"; m.chip_colour = c; m.accent = c;
+        m.title = focused ? juce::String(lane >= 0 ? note_name(roll_row(*focused, lane) + named_by) : key_label(track, focused->key)) +
+                  " / " + (focused->slice ? juce::String(int(focused->slice)) + " / " : juce::String()) + where(s, focused->tick) : juce::String("ROLL ACTIONS");
+        auto flag = [&](uint8_t f) { return focused && bool(focused->flags & f); };
+        auto state = [&](uint8_t f) { return juce::String(flag(f) ? "ON" : "OFF"); };
+        m.items[RowAccent] = card_item(Icon::Accent, "ACCENT", state(step_accent), flag(step_accent));
+        m.items[RowSlide] = card_item(Icon::Slide, "SLIDE", state(step_slide), flag(step_slide));
+        m.items[RowTie] = card_item(Icon::Tie, "TIE TO NEXT", state(step_tie), flag(step_tie));
+        m.items[RowDelete] = card_item(Icon::Trash, "DELETE NOTE", "", false, true);
+        m.items[RowSelectAll] = card_item(Icon::Note, "SELECT ALL", "", false);
+        m.items[RowSplit] = card_item(Icon::Scissors, "SPLIT AT CURSOR", "", false);
+        m.items[RowImportMidi] = card_item(Icon::Note, "IMPORT MIDI", "", false);
+        m.items[RowAgain] = card_item(Icon::Note,"GENERATE AGAIN","REUSE LAST SETUP",false);
+        m.items[RowFromRoll] = card_item(Icon::Note,"GENERATE FROM ROLL","USE CURRENT MIDI NOTES",false);
+        m.items[RowDrums] = card_item(Icon::Pattern,"DRUM GENERATOR","GENRE / GROOVE / PADS",false);
+        m.items[RowHarmony] = card_item(Icon::Note,"MIDI GENERATOR","",false);
+        m.items[RowBar]=card_item(Icon::Note,"SELECT BAR","CHORD GENERATOR",false);
+        m.items[RowOctave]=card_item(Icon::Note,"NOTE OCTAVE","SHIFT SELECTED NOTES",false);
+        m.count = sheet_rows; m.current = ui.sheet_row % sheet_rows;
+        card_sheet(p, m);
+    }
+    if (ui.roll_tools.fine) {
+        p.fill(0, zone::knobs_y, zone::width, zone::knobs_h, colour::bg);
+        std::array<KnobCard, 3> cards;
+        const char* labels[] {"ZOOM", "SPLIT STEP", ui.shift ? "ZOOM" : ""};
+        for (unsigned n = 0; n < cards.size(); ++n) {
+            cards[n].state = n < 2 || ui.shift ? KnobCard::State::Rest : KnobCard::State::Idle;
+            cards[n].label = labels[n];
+            cards[n].shade = knob_shade(0, n);
+        }
+        const double magnification = double(pattern.q()) / roll_view_grid(pattern.q(), ui.roll_tools.zoom);
+        cards[0].value = juce::String(magnification, magnification < 1.0 ? 3 : 1) + "x";
+        cards[1].value = roll_split_increment_name(ui.roll_tools.increment);
+        if (ui.shift) cards[2].value = cards[0].value;
+        knob_strip(p, cards);
+    }
+
+}
+
+void pad(Context& c, unsigned pad, uint8_t velocity, bool down) {
+    if(c.ui.drums.open){c.play_pad(pad,velocity,down);return;}
+    if(c.ui.bar_edit.page){c.play_pad(pad,velocity,down);return;}
+    if(c.ui.harmony.open){c.play_pad(pad,velocity,down);return;}
+    if (c.ui.roll_tools.fine) { c.play_pad(pad, velocity, down); return; }
+    if (down && c.ui.erase) { // Erase + pad: every note of its key, once B3 says so (as on Step Edit)
+        c.ui.sheet_open = false;
+        int key = pad_key(c.project, c.track(), pad);
+        if (c.track().used() && key >= 0) ask(c, UiState::Ask::EraseKeyEvents, key);
+        return;
+    }
+    c.play_pad(pad, velocity, down);
+    if (!down && c.ui.held_note == int(pad)) c.ui.held_note = -1; // its cards back from the locks
+    if (!down || !c.track().used()) return;
+    if (c.ui.sheet_open) c.ui.sheet_open = false; // a pad leaves the sheet and writes as ever
+    if (c.ui.recording && c.host.playing()) return; // played in live by Seq Record
+    const auto& t = c.track();
+    const int lane = roll_lane(t);
+    if (lane >= 0) { // 16 Levels on a kit: its pad at this pad's pitch, velocity and cutoff, as Seq Record keeps it
+        auto level = levels_of(c.project, t, pad);
+        if (level.none) return; // Zones: a pad past the instrument's last key
+        roll_write(c, lane, uint8_t(level.velocity ? level.velocity : velocity), level.semitones, level.cutoff);
+    } else {
+        int v = t.layout == PadLayout::Levels ? level_velocity(pad) : velocity;
+        roll_write(c, pad_key(c.project, t, pad), uint8_t(v));
+    }
+    if (roll_focus(c.pattern(), c.ui, lane) >= 0) c.ui.held_note = int8_t(pad); // held on its note: the pots lock it (roadmap P1)
+}
+
+void wheel(Context& c, int delta) {
+    if(c.ui.drums.open){drum_wheel(c,delta);return;}
+    if(c.ui.bar_edit.page){bar_wheel(c,delta);return;}
+    if(c.ui.harmony.open){harmony_wheel(c,delta);return;}
+    if (c.ui.roll_tools.fine) { roll_split_step(c, delta); return; }
+    if (c.ui.sheet_open) {
+        c.ui.sheet_row = uint8_t(std::clamp<int>(c.ui.sheet_row + delta, 0, int(sheet_rows) - 1));
+        return;
+    }
+    if (roll_selection_wheel(c, delta)) return; // Shift: marks notes; marked, the wheel moves them (Shift: their pitch)
+    if (seq_following(c)) return;               // Settings > SEQ > Follow has the cursor while it plays
+    roll_step(c.pattern(), c.ui, delta, roll_lane(c.track()));
+}
+
+void do_row(Context& c) {
+    switch (c.ui.sheet_row % sheet_rows) {
+    case RowAccent: roll_flag(c, step_accent); break;
+    case RowSlide: roll_flag(c, step_slide); break;
+    case RowTie: roll_flag(c, step_tie); break;
+    case RowSelectAll: c.ui.sheet_open = false; roll_select_all(c); break;
+    case RowSplit: roll_start_split(c); break;
+    case RowImportMidi: open_midi_import(c); break;
+    case RowAgain: harmony_again(c,false); break;
+    case RowFromRoll: harmony_again(c,true); break;
+    case RowDrums: drum_open(c); break;
+    case RowHarmony: harmony_open(c); break;
+    case RowBar: bar_open(c,false); break;
+    case RowOctave: bar_open(c,true); break;
+    case RowDelete: c.ui.sheet_open = false; roll_erase(c); break;
+    default: break;
+    }
+}
+
+void push(Context& c) {
+    if(c.ui.drums.open){drum_push(c);return;}
+    if(c.ui.bar_edit.page){bar_push(c);return;}
+    if(c.ui.harmony.open){harmony_preview(c);return;}
+    if (c.ui.roll_tools.fine) { roll_finish_split(c); return; }
+    if (c.ui.sheet_open) { do_row(c); return; }
+    if (roll_paste(c)) return; // Shift + Erase copied the marked notes: here they go
+    c.ui.sheet_open = true;
+    c.ui.sheet_row = roll_focus(c.pattern(), c.ui, roll_lane(c.track())) < 0 ? RowSelectAll : RowAccent; // the likely job lit
+}
+
+void soft(Context& c, int key) {
+    if(c.ui.drums.open){drum_soft(c,key);return;}
+    if(c.ui.bar_edit.page){bar_soft(c,key);return;}
+    if(c.ui.harmony.open){harmony_soft(c,key);return;}
+    if (c.ui.roll_tools.fine) {
+        if (key == 0) roll_finish_split(c);
+        if (key == 1) {
+            c.ui.roll_tools.fine = false;
+            for (auto& pot : c.ui.pots) {
+                pot.bound = 0;
+                pot.engaged = false;
+            }
+        }
+        return;
+    }
+    if (key == 2 && c.ui.shift) { open_midi_import(c); return; }
+    if (c.ui.sheet_open) { // the cards: B1 BACK; the wheel and Push do the rest
+        if (key == 0) c.ui.sheet_open = false;
+        return;
+    }
+    if (key == 1) { c.ui.trig_cards = !c.ui.trig_cards; return; } // ROLL again: the note's TRIG cards, or back
+    seq_hub_soft(c, key);
+}
+
+void pitch(Context& c, int way) {
+    if(c.ui.drums.open){drum_wheel(c,way);return;}
+    if(c.ui.bar_edit.page){bar_wheel(c,way);return;}
+    if(c.ui.harmony.open){if(c.ui.harmony.confirm){harmony_wheel(c,way);return;}if(c.ui.harmony.busy)return;c.ui.harmony.selected=uint16_t(std::clamp<int>(int(c.ui.harmony.selected)+way,0,std::max(0,int(c.ui.harmony.result.count)-1)));return;}
+    if (c.ui.roll_tools.fine) { roll_split_step(c, way); return; }
+    if (c.ui.sheet_open) { wheel(c, way); return; }
+    if (roll_marks_octave(c, way)) return; // the marked notes an octave
+    roll_pitch(c.pattern(), c.ui, way, roll_lane(c.track()));
+}
+} // namespace
+
+const PageSpec roll_page {draw, pad, wheel, push, soft, pitch};
+
+} // namespace melodee

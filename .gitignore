@@ -1,0 +1,42 @@
+build/
+.local/
+__pycache__/
+*.py[cod]
+*.so
+*.o
+*.wav
+*.png
+# Doc pages' screenshots and diagrams are tracked (base/tools/check_private_files.py allows them), and so is the art
+# of a worked example (docs/examples/plugin-skin).
+!docs/images/**/*.png
+!docs/examples/**/*.png
+*.log
+.DS_Store
+.env*
+*.key
+*.pem
+*ed25519*
+known_hosts*
+projects/
+captures/
+backups/
+.ssh/
+private/
+*.xpj
+*.xpm
+*.xps
+*.bin
+*.img
+*.raw
+*.pcm
+*.zip
+*.tar
+*.gz
+*.aif
+*.aiff
+*.settings
+!/AGENTS.md
+dist/
+
+# The quickstart's screenshots (rendered by --melodee-preview)
+!/docs/images/quickstart/*.png

@@ -1,0 +1,110 @@
+<div class="device" id="device">
+  <section class="workshop-hero">
+    <div class="hero-copy"><p class="kicker">THE TAPE WORKSHOP COMPANION</p><h1>Make room<br>for your sound.</h1>
+      <p>Your MPC, a little more connected. Capture a performance, shape your next sample pack, and keep everything close.</p>
+      <div class="hero-actions"><a class="live-open" href="/live">Open Live Screen</a><a class="text-link" href="/expansions">Build an expansion</a></div>
+      <span class="hero-detail">Made for your MPC. Connected over USB-C.</span>
+    </div>
+    <div class="hero-art"><img src="/bridge-splash.png" width="320" height="240" alt="Tape Workshop wordmark on a solid black splash screen"><span class="hero-art-caption">Tape Workshop. Your sound, connected.</span></div>
+  </section>
+  <nav class="workshop-shortcuts" aria-label="Your creative tools">
+    <a href="/live"><span class="shortcut-glyph" aria-hidden="true">◉</span><strong>Your screen. Bigger.</strong><span>Live picture and direct MPC sound.</span></a>
+    <a href="/tutorial"><span class="shortcut-glyph coral" aria-hidden="true">▣</span><strong>Share how you make it.</strong><span>A recording space for your tutorials.</span></a>
+    <a href="/expansions"><span class="shortcut-glyph mint" aria-hidden="true">▦</span><strong>Build something yours.</strong><span>Eight banks. Your samples. Your cover.</span></a>
+  </nav>
+  <div class="section-heading"><p class="kicker">CONNECTED WORKSPACE</p><h2>A place for everything.</h2><p>Your device, library and updates, all together.</p></div>
+  <section class="cards" aria-label="This MPC">
+    <div class="card" style="--tone:var(--coral)">
+      <span class="label">Version</span>
+      <span class="value" id="v-version">–</span>
+      <span class="gauge"><i id="g-version"></i></span>
+    </div>
+    <div class="card" style="--tone:var(--amber)">
+      <span class="label">SD card</span>
+      <span class="value" id="v-card">–</span>
+      <span class="gauge"><i id="g-card"></i></span>
+    </div>
+    <div class="card" style="--tone:var(--mint)">
+      <span class="label">Plug-ins</span>
+      <span class="value" id="v-plugins">–</span>
+      <span class="gauge"><i id="g-plugins"></i></span>
+    </div>
+  </section>
+
+  <section class="panel online-update" id="online-update" style="--tone:var(--coral)">
+    <header><h2 class="label">Tape Workshop updates</h2><a href="https://github.com/bsauce42/tape-workshop-mpc-sample/releases" target="_blank" rel="noopener">GitHub releases</a></header>
+    <p id="online-update-state" class="say" role="status">Connect the MPC to check for updates.</p>
+    <div class="live-actions"><button type="button" id="online-update-check">Check now</button><button type="button" id="online-update-send" disabled>Download to MPC</button><button type="button" id="online-update-install" disabled>Install downloaded update</button><a id="online-update-zip" class="live-open" hidden target="_blank" rel="noopener">Download ZIP</a></div>
+    <label class="auto-update-choice"><input type="checkbox" id="online-update-auto"> Automatically download new updates to this MPC</label>
+    <label class="auto-update-choice"><input type="checkbox" id="online-update-auto-install"> Install automatically when playback stops</label>
+    <p class="live-help">Your phone or computer needs internet access. Installation saves your project and restarts Tape Workshop. Save a new, unnamed project first. You can also choose a signed ZIP in Manual install, or press INSTALL on the MPC.</p>
+  </section>
+
+  <section class="panel sample-search" style="--tone:var(--amber)">
+    <header><h2 class="label">Sample search</h2></header>
+    <form id="sample-search" class="action">
+      <input type="search" name="q" maxlength="48" aria-label="Sample name" placeholder="Kick">
+      <button type="submit">Search MPC</button>
+    </form>
+    <p class="say" id="sample-search-status" aria-live="polite">Open Sample Select on the MPC. Type or use your keyboard microphone.</p>
+  </section>
+
+  <div class="panels">
+    <section class="panel" id="update" style="--tone:var(--coral)" data-kind="update">
+      <header><h2 class="label">Manual install</h2><span class="aside">Signed Tape Workshop .zip</span></header>
+      <label class="drop" data-drop>
+        <input type="file" accept=".zip" hidden>
+        <svg class="glyph" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 4h10l6 6v18H9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M19 4v6h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M16 13v10m-4-4 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="drop-name" data-name>Tape-Workshop-v&lt;version&gt;.zip</span>
+        <span class="drop-hint" data-hint>Drop here or choose</span>
+      </label>
+      <div class="action">
+        <span class="gauge wide"><i data-bar></i></span>
+        <button type="button" data-send disabled>Send</button>
+      </div>
+      <ol class="steps" aria-label="Update steps">
+        <li data-step="send">Send</li>
+        <li data-step="ask">Install on MPC</li>
+        <li data-step="saving">Save</li>
+        <li data-step="checking">Check</li>
+        <li data-step="writing">Copy</li>
+        <li data-step="starting">Restart</li>
+      </ol>
+      <p class="say" data-say></p>
+    </section>
+
+    <section class="panel" id="plugins" style="--tone:var(--mint)" data-kind="plugin">
+      <header><h2 class="label">Plug-ins</h2><span class="aside">-mpc-sample.zip</span></header>
+      <label class="drop" data-drop>
+        <input type="file" accept=".zip" hidden>
+        <svg class="glyph" viewBox="0 0 32 32" aria-hidden="true"><path d="M12 4v7m8-7v7M8 11h16v5a8 8 0 0 1-16 0zM16 24v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="drop-name" data-name>Plug-in .zip</span>
+        <span class="drop-hint" data-hint>Drop here or choose</span>
+      </label>
+      <div class="action">
+        <span class="gauge wide"><i data-bar></i></span>
+        <button type="button" data-send disabled>Install</button>
+      </div>
+      <p class="say" data-say></p>
+    </section>
+
+    <section class="panel installed" style="--tone:var(--mint)">
+      <header><h2 class="label">Installed</h2><span class="aside">Melodee/Plugins</span></header>
+      <ul class="lanes" id="plugin-list" aria-label="Installed plug-ins"></ul>
+    </section>
+  </div>
+
+  <section class="home-shortcut" aria-label="Home screen shortcut"><h2>Add Tape Workshop to your phone</h2><p>Open <a href="http://192.168.155.1/">http://192.168.155.1/</a> while the MPC is connected by USB.</p><div class="home-shortcut-row"><img src="/app-icon-180.png" width="76" height="76" alt="Tape Workshop app icon"><div><button type="button" id="home-install">Add to Home Screen</button><a class="button quiet" href="/app-icon-512.png" download="Tape-Workshop-App-Icon.png">Download app icon</a></div></div><p id="home-install-help" role="status">iPhone: open this page in Safari, tap Share → Add to Home Screen → Add. The shortcut opens this local companion when your MPC is connected.</p></section>
+  <section class="learn" aria-label="Docs">
+    <a class="learn-card" href="/docs/quickstart" style="--tone:var(--amber)">
+      <span class="label">Quickstart</span>
+      <span class="learn-title">From the zip to a saved beat</span>
+      <ol class="learn-steps">{{quickstart_steps}}</ol>
+    </a>
+    <a class="learn-card" href="/docs/manual" style="--tone:var(--lilac)">
+      <span class="label">Manual</span>
+      <span class="learn-title">{{chapter_count}} chapters</span>
+      <ol class="learn-steps">{{chapter_names}}</ol>
+    </a>
+  </section>
+</div>

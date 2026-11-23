@@ -1,0 +1,173 @@
+{
+  "schema": 1,
+  "bundles": [
+    {
+      "folder": "Tape Workshop - VST - Afterglow Piano",
+      "libraries": [
+        "afterglow.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Aphex Move",
+      "libraries": [
+        "aphex_move.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Astral Loom",
+      "libraries": [
+        "astral_loom.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Bloom Reverb",
+      "libraries": [
+        "bloom_reverb.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Braids Move",
+      "libraries": [
+        "braids_move.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Break 26",
+      "libraries": [
+        "break26.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Contour Comp",
+      "libraries": [
+        "contour_comp.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Dex FM",
+      "libraries": [
+        "dex_fm.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Dexed Move",
+      "libraries": [
+        "dexed_move.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Electric",
+      "libraries": [
+        "tape_workshop_electric.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Gate Keeper",
+      "libraries": [
+        "gate_keeper.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Guitar",
+      "libraries": [
+        "tape_workshop_guitar.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Hera Move",
+      "libraries": [
+        "hera_move.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Layer House",
+      "libraries": [
+        "layer_house.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Melody Forge",
+      "libraries": [
+        "melody_forge.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Orchestra",
+      "libraries": [
+        "tape_workshop_orchestra.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Plaits Move",
+      "libraries": [
+        "plaits_move.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Prism EQ",
+      "libraries": [
+        "prism_eq.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Rack 76",
+      "libraries": [
+        "rack_76.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Room Grand",
+      "libraries": [
+        "room_grand.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Second Spin",
+      "libraries": [
+        "second_spin.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Sloop FM6",
+      "libraries": [
+        "sloop_fm6.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Stillwater",
+      "libraries": [
+        "stillwater.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Strings",
+      "libraries": [
+        "tape_workshop_strings.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Sub Foundry",
+      "libraries": [
+        "sub_foundry.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Velvet Choir",
+      "libraries": [
+        "velvet_choir.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Vocal Tune",
+      "libraries": [
+        "vocal_tune.so"
+      ]
+    },
+    {
+      "folder": "Tape Workshop - VST - Prism FM",
+      "libraries": [
+        "tape_workshop_prism.so"
+      ]
+    }
+  ]
+}
