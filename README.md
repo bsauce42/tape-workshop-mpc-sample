@@ -20,6 +20,14 @@ Supported stock firmware: **1.3.0.12 and 1.4.0.7**. Firmware 1.4 requires **Deve
 
 For manual SD installation, power off the MPC, extract the signed ZIP and replace the card-root **autorun/** folder. Preserve **Melodee/**. On firmware 1.4, also copy the root **autorun.sh** launcher. The browser updater does not install that root launcher. The launcher alone does not contain the OS. Sources and guides are separate computer downloads, not SD installation files.
 
+## Optional plug-in library — all 28
+
+[Download Tape-Workshop-v196-Plugins.zip](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/download/v0.7.0-tapeworkshop-community.196/Tape-Workshop-v196-Plugins.zip)
+
+This separate ZIP includes all 28 plug-ins with their samples/resources, artwork, Bloom IRs and license notices. Power off the MPC and back up matching folders, extract the ZIP, then merge **Melodee/Plugins/** into the SD-card library. Preserve projects, samples, user presets and unrelated plug-ins. Eject safely and restart. Use the v196 OS for the matching plug-in screens. Do not select this ZIP in the browser OS updater.
+
+Plug-in ZIP SHA-256: 2d39283a6788667bb1faae6068ad0ec81c23e0aff3159010bacf0896345f5d70
+
 ## Main feature: WAV → MIDI Generator
 
 Generate editable **Chords, Bass Line, Pluck, Melody or Hybrid** directly on the MPC. Choose a WAV sample, existing MIDI Roll, or the project key as the source. Hybrid combines chords and melody.
