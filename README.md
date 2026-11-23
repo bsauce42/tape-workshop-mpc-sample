@@ -1,104 +1,63 @@
 # Tape Workshop for MPC Sample
 
-Tape Workshop is an independent community build based on **Melodee v0.5.1 by Kerem Kiliç (Ellic Studio)** for the Akai MPC Sample. All **26 instruments and effects**, including Melody Forge 1.0, are included.
+Tape Workshop is an independent community build based on **Melodee 0.7 by Kerem Kiliç (Ellic Studio)** for the Akai MPC Sample. This OS update retains support for the existing **28 Tape Workshop instruments and effects**; keep your installed plug-in folders.
 
-## Download v184 for the SD card
+## Download v196 — signed OS update
 
-[Download Tape-Workshop-v184-SD-Card.zip](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/download/v0.5.1-tapeworkshop-community.184/Tape-Workshop-v184-SD-Card.zip)
+[Download Tape-Workshop-v196-Signed-Update.zip](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/download/v0.7.0-tapeworkshop-community.196/Tape-Workshop-v196-Signed-Update.zip) · [Release notes and supporting files](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/tag/v0.7.0-tapeworkshop-community.196)
 
-**This is the only download needed for SD installation.** About 262 MiB, containing only:
-
-- **autorun/** — the current Tape Workshop OS.
-- **Melodee/Plugins/** — all 26 plug-ins, samples/resources, skins and required license notices.
-
-No source archives, standalone guide ZIPs or development files are inside the SD download. [Release notes and other download methods](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/tag/v0.5.1-tapeworkshop-community.184).
+**This release is the OS-only signed update. Keep your existing Melodee folder, plug-ins, projects, samples and presets.** Plug-in binaries are not included or replaced.
 
 ### Install
 
-For MPC Sample firmware **1.3.0.12**:
+Supported stock firmware: **1.3.0.12 and 1.4.0.7**. Firmware 1.4 requires **Developer Mode** and the separate [autorun.sh launcher](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/download/v0.7.0-tapeworkshop-community.196/autorun.sh) copied beside the autorun folder at the SD-card root.
 
-1. Back up the SD card and matching plug-in folders; power off the MPC.
-2. Extract the SD Card ZIP and replace the card-root **autorun** folder.
-3. Merge the included **Melodee/Plugins** folders onto the card. Preserve projects, samples, user presets and other third-party plug-ins.
-4. Eject the card, restart the MPC and reopen the companion at http://192.168.155.1/ after updating.
+1. Save your project and back up the SD card.
+2. Connect the MPC over USB and open the Tape Workshop browser companion at http://192.168.155.1/.
+3. In Manual Install / update, select **Tape-Workshop-v196-Signed-Update.zip**.
+4. Physically press **B3 / INSTALL** when prompted on the MPC and let it restart.
+5. Refresh the browser companion.
 
-SD users do not need the separate **Signed-Update.zip** or source downloads. Signed Update remains for the existing browser updater/Manual Install; it changes the OS only and does not install plug-in folders.
+For manual SD installation, power off the MPC, extract the signed ZIP and replace the card-root **autorun/** folder. Preserve **Melodee/**. On firmware 1.4, also copy the root **autorun.sh** launcher. The browser updater does not install that root launcher. The launcher alone does not contain the OS. Sources and guides are separate computer downloads, not SD installation files.
 
-## Main update: WAV → MIDI Generator
+## Main feature: WAV → MIDI Generator
 
-Turn a sample's estimated harmony into editable **Chords, Bass Line, Pluck,
-Melody or Hybrid** parts, directly on the MPC. Choose genre, scale and rhythm,
-preview a region, and add notes straight to the Roll. Hybrid is chords plus melody.
+Generate editable **Chords, Bass Line, Pluck, Melody or Hybrid** directly on the MPC. Choose a WAV sample, existing MIDI Roll, or the project key as the source. Hybrid combines chords and melody.
 
-1. Load the source WAV on a sampler pad and set the correct project BPM.
-2. Select a melodic instrument track, open **Roll**, push **Data**, and choose
-   **MIDI GENERATOR**.
-3. Follow **Source → Output → Target → Preview → Add**. Select **WAV sample**
-   and the actual source track and bank/pad. They can differ from the destination.
-4. Confirm the WAV pad: background analysis estimates its key. The Scale page
-   shows a value such as **Auto / D minor**. The project key stays unchanged.
-5. Choose **Generate notes**, then listen. **Add to Roll** offers **Cancel /
-   Keep + Add / Replace** if notes already exist. Save your project.
+1. Load a source WAV on a sampler pad and set the correct project BPM.
+2. Select a melodic instrument track. Open **Roll → Data Push → MIDI GENERATOR**.
+3. Follow **Source → Output → Target → Preview → Add**. For WAV input, select the actual source track and bank/pad; these can differ from the destination.
+4. Confirm the WAV pad to start background key estimation. Scale can show **Auto / D minor**; the project key stays unchanged.
+5. Choose the output, genre, scale and rhythm. Generate and preview, then **Add to Roll**. If notes already exist, choose **Cancel / Keep + Add / Replace**. Save your project.
 
-**Data/K2** changes values, **Push/B2 Next** confirms, **B1 Back** returns,
-**K1** selects a setting and **B3 Options** opens advanced controls. For simple
-chords, enable **Triads** and disable **Sevenths/Ninths**. Whole Notes changes
-rhythm, not chord size. WAV detection estimates harmony; it is not exact
-transcription of every audible note.
+**Data/K2** changes values, **Push/B2 Next** confirms, **B1 Back** returns, **K1** selects a setting and **B3 Options** opens advanced controls. **Generate Again** remembers the setup; **Generate From Roll** uses existing MIDI.
 
-[Full illustrated MIDI Generator instructions](docs/guide/wav-to-midi.md) ·
-[Drum Generator: choose sounds and generate a beat](docs/guide/drum-generator.md) ·
-[Download the complete updated Quick Start and Manual](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/download/v0.5.1-tapeworkshop-community.184/Tape-Workshop-v184-Guides.zip)
+For simple chords enable **Triads**, then disable **Sevenths/Ninths**. Whole Notes changes rhythm, not chord size. Bass Line defaults to sustained classic 808 roots. Saved generator setups retain their settings. WAV harmony analysis is an estimate, not exact transcription of every audible note.
+
+[Illustrated MIDI Generator instructions](docs/guide/wav-to-midi.md) · [Drum Generator instructions](docs/guide/drum-generator.md) · [Offline Quick Start and Manual](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/download/v0.7.0-tapeworkshop-community.196/Tape-Workshop-v196-Guides.zip)
 
 ![Automatic WAV key preview](docs/images/generators/midi-scale.png)
 
-## Also new in v184
+## Included features
 
-- Automatic WAV key preview before note generation; explicit scales use the
-  detected WAV root.
-- Updated browser Quick Start and Manual with nine new UI screenshots.
-- Drum Generator with genre/groove controls and guided kick/snare/hat selection.
-- Tutorial recorder: **MPC only** omits the large live screen in new exported
-  videos; **Screen only** omits the hardware. Smooth transitions remain.
-- Dark plum browser file/plug-in rows with bright readable text.
-- Strings, Orchestra, Guitar and Electric in the complete 26-plug-in library.
+- Melodee 0.7 base, with the Tape Workshop generators, themes and browser tools retained.
+- Drum Generator with genre/groove controls and guided kick, snare and hi-hat sound selection.
+- Fullscreen Live Screen for a larger display, separate from Tutorial recording.
+- Tutorial recording with Both, MPC only and Screen only views, independent framing, smooth transitions, backgrounds, logos and direct stereo audio.
+- Readable dark plum browser file and plug-in rows, expansion artwork, bank/pad import, MIDI import and sample search.
+- Typed Sample Select search: **Shift + B1**. Partial words and phrases work; DONE/BACK keeps the filter and clearing text restores the list.
+- Plug-in faces, parameter pages, stereo waveforms, spectra, meters and browser artwork. Data browses exposed instrument presets; B2 retains the preset menu.
+- Melody Forge, Strings, Orchestra, Guitar, Electric, Bloom Reverb with IR resources, and Prism FM Light in the existing 28-plug-in library (installed separately).
+- Existing Second Spin idle-wake fix, Room Grand release-noise defaults, Sub Foundry, Contour Comp and enlarged Prism EQ layouts.
 
-Refresh the browser after installing. Previous recordings are not modified.
-Automatic Song Generator, Chop Generator and Final Cut/Logic export remain
-removed. Manual Song Mode and native Chop remain.
-
-## Live typed search
-
-Open typed Sample Select search with **Shift + B1**. Results update from the first letter. Partial words and phrases work: **pia** finds Piano; **warm pia** finds Warm Grand Piano.
-
-Names beginning with the first word you type come first. For **kick**, **Kick 01** and **Kick Deep** appear before **Kings Dog Kicks** and **Deep Kick**. Other matches remain below. **DONE** or **BACK** closes typing and keeps the filter; erasing all characters restores the normal list. Voice matching is unchanged.
-
-## Other included features
-
-- Melody Forge: four-layer synthesizer, 80 presets across Trap, HipHop, R&B, EDM and DnB, with a dedicated live UI and 21 control pages.
-- Distinct plug-in faces, parameter pages, live stereo waveforms, spectra and meters; browser artwork for all 26 plug-ins; Data-knob presets and optional B2 preset menu.
-- Second Spin idle-wake/Crackle fix and audio-driven cassette reels; Afterglow Piano hot-green theme; Room Grand 1.3.1 release-noise defaults.
-- Roll MIDI import, selection, Shift + K3 zoom and fine splitting; expansion bank/pad import, cover art and eight-bank builder; Live Screen/Tutorial Mode, stereo recording, themes, startup lighting and signed updates.
-
-Sub Foundry, Contour Comp and the enlarged Prism EQ retain their established layouts. Browser DAW/Studio remains removed. The separate Melodee plug-in UI installer is a different product.
+Manual Song Mode and native Chop remain. Automatic Song/Chop Generators, browser DAW/Studio, external browser DSP/Mac VST hosting and Final Cut/Logic export remain removed. The separate Melodee plug-in UI installer is a different product.
 
 ## Verification and source
 
-The complete SD ZIP passed checks of all 26 plug-in bundles, resources/licenses,
-and the signed OS bytes and permissions. ARM64 build, harmony/MIDI checks,
-recording-view composition, save recovery and manual links/assets passed.
-The MPC is confirmed running v184 and serving the recorder fix; broader testing
-of long recordings and different samples remains ongoing.
+ARM64 build, native sequencing/core tests, MIDI generator regressions, complete plug-in packaging and signed update verification passed. **Physical MPC playback and firmware-1.4 boot still require on-device verification.** Linux-only integration checks were skipped on macOS.
 
-SD ZIP SHA-256: `17a1dcf5f7fa3bd51fa445a95323fd6ce94143cafbdecae533bce75943685a6f`
+Signed updater SHA-256: f7abe3d2eb9d4c8d61089d99ed6cf892e8a82e0a23b9f71d8b7b073e83cbc31e
 
-[Release files and notes](https://github.com/bsauce42/tape-workshop-mpc-sample/releases/tag/v0.5.1-tapeworkshop-community.184)
-include the signed **OS-only** updater, named **OS and plug-in source archives**,
-checksums and an optional offline guide. Use **Melodee-v184-source.tar.gz** and
-**Tape-Workshop-v184-Plugins-Source.tar.gz** for source, rather than GitHub's
-automatic archive of this distribution/documentation repository. The OS source
-commit is `e21d6ba097b4f95c91b94b609158cebef18ba932`.
+Use the release assets **Melodee-v196-source.tar.gz** and **Tape-Workshop-v196-Plugins-Source.tar.gz** for corresponding source, rather than GitHub’s automatic archive of this distribution/documentation repository. The OS source commit is **3f30783**; the source archive includes the populated base and custom core. Required component licenses and resource notices are included.
 
-Tape Workshop by **bsauce42**, based on **Melodee by Kerem Kiliç (Ellic Studio)**.
-Original copyright, AGPL and component license notices are retained in the
-build and source downloads. This is an independent community project.
+Tape Workshop additions and branding: **bsauce42**. Based on **Melodee by Kerem Kiliç (Ellic Studio)**. Original copyright and license notices are retained.
